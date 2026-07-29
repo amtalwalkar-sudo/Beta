@@ -771,7 +771,7 @@ async function startWork(){
     startOdo:Number(odo), endOdo:null, cash:0, online:0, status:'Open',
     startLoc: loc
   });
-  save('fleet_sessions', sessions);
+  save('betafleet_sessions', sessions);
   renderWork();
   return true;
 }
@@ -786,7 +786,7 @@ async function endWork(){
   open.endOdo = endOdo; open.cash = cash; open.online = online;
   open.endTime = nowTimeStr(); open.status = 'Closed';
   open.endLoc = loc;
-  save('fleet_sessions', sessions);
+  save('betafleet_sessions', sessions);
   renderWork();
   attachOdoContinuity('fuel-odo', 'fuel-odo-warning');
   attachOdoContinuity('pt-start-odo', 'pt-odo-warning');
@@ -795,7 +795,7 @@ async function endWork(){
 async function deleteSession(id){
   if(!await showConfirm('Delete this session?')) return;
   sessions = sessions.filter(s=>s.id!==id);
-  save('fleet_sessions', sessions);
+  save('betafleet_sessions', sessions);
   renderWork();
 }
 function renderWorkHistory(){
@@ -882,7 +882,7 @@ function savePersonalTrip(){
   if(!date || !startOdo || !endOdo){ showAlert('Enter date, start odometer, and end odometer'); return; }
   if(endOdo <= startOdo){ showAlert('End odometer must be greater than start odometer'); return; }
   personalTrips.push({id:uid('PT'), date, startOdo, endOdo, note});
-  save('fleet_personal', personalTrips);
+  save('betafleet_personal', personalTrips);
   document.getElementById('pt-start-odo').value='';
   document.getElementById('pt-end-odo').value='';
   document.getElementById('pt-note').value='';
@@ -894,7 +894,7 @@ function savePersonalTrip(){
 async function deletePersonalTrip(id){
   if(!await showConfirm('Delete this personal trip?')) return;
   personalTrips = personalTrips.filter(p=>p.id!==id);
-  save('fleet_personal', personalTrips);
+  save('betafleet_personal', personalTrips);
   renderPersonalTrips();
 }
 function renderPersonalTrips(){
@@ -958,7 +958,7 @@ function saveFuelEntry(){
   const amount = Number(document.getElementById('fuel-amount').value);
   if(!date||!time||!odo||!price||!amount){ showAlert('Fill in all fields'); return; }
   fuelEntries.push({id:uid('FE'), date, time, odo, price, amount});
-  save('fleet_fuel', fuelEntries);
+  save('betafleet_fuel', fuelEntries);
   document.getElementById('fuel-odo').value='';
   document.getElementById('fuel-price').value='';
   document.getElementById('fuel-amount').value='';
@@ -970,7 +970,7 @@ function saveFuelEntry(){
 async function deleteFuel(id){
   if(!await showConfirm('Delete this fuel entry?')) return;
   fuelEntries = fuelEntries.filter(f=>f.id!==id);
-  save('fleet_fuel', fuelEntries);
+  save('betafleet_fuel', fuelEntries);
   renderFuelHistory();
 }
 function renderFuelHistory(){
@@ -1013,14 +1013,14 @@ function saveFixedExpense(){
   const cost = Number(document.getElementById('fx-cost').value);
   if(!issue||!expiry||!cost){ showAlert('Fill in all fields'); return; }
   fixedExpenses.push({id:uid('FX'), type, issue, expiry, cost});
-  save('fleet_expenses', fixedExpenses);
+  save('betafleet_expenses', fixedExpenses);
   document.getElementById('fx-cost').value='';
   renderFixedExpenses();
 }
 async function deleteFx(id){
   if(!await showConfirm('Delete this renewal?')) return;
   fixedExpenses = fixedExpenses.filter(f=>f.id!==id);
-  save('fleet_expenses', fixedExpenses);
+  save('betafleet_expenses', fixedExpenses);
   renderFixedExpenses();
 }
 function getUrgentRenewals(){
@@ -1122,7 +1122,7 @@ function saveLoan(){
   const startDate = document.getElementById('ln-start').value;
   if(!principal||!rate||!tenureMonths||!startDate){ showAlert('Fill in all loan fields'); return; }
   loan = {principal, rate, tenureMonths, startDate, prepayments: loan?loan.prepayments:[]};
-  save('fleet_loan', loan);
+  save('betafleet_loan', loan);
   renderLoan();
   const preview = document.getElementById('ln-emi-preview');
   const original = preview.textContent;
@@ -1133,7 +1133,7 @@ async function deleteLoan(){
   if(!loan) return;
   if(!await showConfirm('Delete the entire loan record? This also removes every prepayment logged against it.')) return;
   loan = null;
-  try{ localStorage.removeItem('fleet_loan'); }catch(e){}
+  try{ localStorage.removeItem('betafleet_loan'); }catch(e){}
   document.getElementById('ln-principal').value = '';
   document.getElementById('ln-rate').value = '';
   document.getElementById('ln-tenure').value = '';
@@ -1147,14 +1147,14 @@ function savePrepayment(){
   const amount = Number(document.getElementById('pp-amount').value);
   if(!date||!amount){ showAlert('Fill in date and amount'); return; }
   loan.prepayments.push({id:uid('PP'), date, amount});
-  save('fleet_loan', loan);
+  save('betafleet_loan', loan);
   document.getElementById('pp-amount').value='';
   renderLoan();
 }
 async function deletePrepayment(id){
   if(!await showConfirm('Remove this prepayment?')) return;
   loan.prepayments = loan.prepayments.filter(p=>p.id!==id);
-  save('fleet_loan', loan);
+  save('betafleet_loan', loan);
   renderLoan();
 }
 function renderLoan(){
@@ -1385,9 +1385,9 @@ function showDayDetail(dateStr){
 
 // ================= INIT =================
 // ================= BACKUP, SNAPSHOT & SAFETY NET =================
-const DATA_KEYS = ['fleet_sessions','fleet_fuel','fleet_expenses','fleet_loan','fleet_personal'];
-const SNAPSHOT_KEY = 'fleet_snapshot';
-const LAST_EXPORT_KEY = 'fleet_last_export_at';
+const DATA_KEYS = ['betafleet_sessions','betafleet_fuel','betafleet_expenses','betafleet_loan','betafleet_personal'];
+const SNAPSHOT_KEY = 'betafleet_snapshot';
+const LAST_EXPORT_KEY = 'betafleet_last_export_at';
 const EXPORT_REMINDER_DAYS = 14;
 
 // ---------- Cloud Backup (existing Firebase project, explicit on-demand only —
@@ -1641,12 +1641,12 @@ function renderExportReminder(){
 }
 
 async function init(){
-  sessions = await loadArr('fleet_sessions');
-  fuelEntries = await loadArr('fleet_fuel');
-  fixedExpenses = await loadArr('fleet_expenses');
-  loan = await loadObj('fleet_loan');
+  sessions = await loadArr('betafleet_sessions');
+  fuelEntries = await loadArr('betafleet_fuel');
+  fixedExpenses = await loadArr('betafleet_expenses');
+  loan = await loadObj('betafleet_loan');
   if(loan && !loan.prepayments) loan.prepayments = [];
-  personalTrips = await loadArr('fleet_personal');
+  personalTrips = await loadArr('betafleet_personal');
 
   initFuelForm();
   initPersonalTripForm();
