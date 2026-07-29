@@ -252,21 +252,7 @@ if('serviceWorker' in navigator){
     z-index:5;
   }
 
-  /* ---------- Daily Profit Calendar ---------- */
-  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:12px; }
-  .cal-weekday{ text-align:center; font-size:9.5px; color:var(--text-dim); font-family:var(--mono); padding-bottom:4px; letter-spacing:0.03em; }
-  .cal-day{
-    aspect-ratio:1; border-radius:8px; background:var(--surface-2); border:1px solid transparent;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;
-  }
-  .cal-day.empty{ background:transparent; }
-  .cal-day.profit{ background:rgba(62,207,142,0.16); border-color:rgba(62,207,142,0.35); }
-  .cal-day.loss{ background:rgba(255,84,112,0.16); border-color:rgba(255,84,112,0.35); }
-  .cal-day.today{ outline:1.5px solid var(--led); outline-offset:1px; }
-  .cal-day .daynum{ font-family:var(--mono); font-size:12px; color:var(--text); font-weight:600; }
-  .cal-day .dayval{ font-family:var(--mono); font-size:8px; color:var(--text-dim); margin-top:1px; }
-  .cal-day.profit .dayval{ color:var(--green); }
-  .cal-day.loss .dayval{ color:var(--red); }
+  /* ---------- Weekly Statement amount coloring (reused from earlier calendar work) ---------- */
   .cal-list-amt.pos{ color:var(--green); }
   .cal-list-amt.neg{ color:var(--red); }
 </style>
@@ -450,22 +436,12 @@ if('serviceWorker' in navigator){
     </div>
     <div class="helptext">Breakeven Target = daily fixed-cost renewals + loan EMI (prorated to the window) + average fuel cost/km × km driven. "7 Days" and "30 Days" are rolling windows ending today. (Cost/km needs at least 2 fuel entries with increasing odometer readings to calculate — mileage is measured between fill-ups.)</div>
 
-    <div class="divider-label">Daily Profit Calendar</div>
-    <div class="card">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-        <button class="btn-ghost" style="width:38px; height:38px; padding:0; border-radius:9px; margin:0; font-size:16px;" onclick="calChangeMonth(-1)">‹</button>
-        <div id="cal-month-label" style="font-family:var(--display); font-weight:600; font-size:15px;"></div>
-        <button class="btn-ghost" style="width:38px; height:38px; padding:0; border-radius:9px; margin:0; font-size:16px;" onclick="calChangeMonth(1)">›</button>
-      </div>
-      <div class="segmented">
-        <button class="active" id="cal-view-grid" onclick="switchCalView('grid')">Grid</button>
-        <button id="cal-view-list" onclick="switchCalView('list')">List</button>
-      </div>
-      <div id="calendar-container"></div>
-      <div class="helptext">Green = profitable day, red = day ran at a loss. Only days with a closed work session are shown/colored. Tap a day in Grid view for a breakdown.</div>
-    </div>
+    <div class="divider-label">Weekly Statement</div>
+    <div class="card" id="weekly-statement"></div>
+  </section>
 
-    <div class="divider-label">Backup & Safety Net</div>
+  <!-- BACKUP TAB -->
+  <section class="tab-panel" id="tab-backup">
     <div class="card">
       <h2>Cloud Backup (BETA slot — separate from Stable)</h2>
       <div class="helptext" id="cloud-backup-status">Checking last cloud backup…</div>
@@ -513,6 +489,10 @@ if('serviceWorker' in navigator){
   <button id="nav-dashboard" onclick="switchTab('dashboard')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-4M12 7v1M17 12h1M7 12h1"/></svg>
     <span>Dashboard</span><span class="dot"></span>
+  </button>
+  <button id="nav-backup" onclick="switchTab('backup')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+    <span>Backup</span><span class="dot"></span>
   </button>
 </nav>
 
@@ -694,7 +674,8 @@ function switchTab(name){
   const titles = {work:['Work',"Track today's driving sessions"],
     fuel:['Fuel',"Log fill-ups, auto mileage & cost/km"],
     expenses:['Expenses & Loan',"Renewals and loan tracking"],
-    dashboard:['Dashboard',"Income, breakeven & profit"]};
+    dashboard:['Dashboard',"Income, breakeven & profit"],
+    backup:['Backup',"Cloud backup, export/import & reset"]};
   document.getElementById('header-title').textContent = titles[name][0];
   document.getElementById('header-sub').textContent = titles[name][1];
   if(name==='dashboard') renderDashboard();
@@ -1274,116 +1255,59 @@ function renderDashboard(){
     document.getElementById('dash-loan-tenure').textContent = '—';
   }
 
-  renderCalendar();
+  renderWeeklyStatement();
 }
 
-// ================= DAILY PROFIT CALENDAR =================
-let calMonthOffset = 0;
-let calView = 'grid';
-
-function calBaseDate(){
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth()+calMonthOffset, 1);
+// ================= WEEKLY STATEMENT =================
+// Groups closed work sessions into Sun–Sat weeks and shows profit + total online
+// (on-duty) hours per week — a compact list instead of a full calendar.
+function getWeekStart(dateStr){
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - d.getDay()); // roll back to that week's Sunday
+  return d;
 }
-function calChangeMonth(delta){
-  calMonthOffset += delta;
-  renderCalendar();
-}
-function switchCalView(v){
-  calView = v;
-  document.getElementById('cal-view-grid').classList.toggle('active', v==='grid');
-  document.getElementById('cal-view-list').classList.toggle('active', v==='list');
-  renderCalendar();
-}
-// Precomputes per-day income/km/profit for every day in the given month that has
-// at least one closed session. Avoids recalculating avg cost/km & fixed costs per-day.
-function computeMonthProfitMap(year, month){
+function computeWeeklyStats(){
   const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
   const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
   const fixedDaily = totalDailyFixedCost();
   const loanDaily = dailyLoanCost();
-  const map = {};
+  const weeks = {};
   sessions.filter(s=>s.status==='Closed').forEach(s=>{
-    const d = new Date(s.date);
-    if(d.getFullYear()===year && d.getMonth()===month){
-      if(!map[s.date]) map[s.date] = {income:0, km:0};
-      map[s.date].income += s.cash + s.online;
-      map[s.date].km += (s.endOdo - s.startOdo);
-    }
+    const weekStart = getWeekStart(s.date);
+    const key = weekStart.toISOString().slice(0,10);
+    if(!weeks[key]) weeks[key] = {weekStart, income:0, km:0, hours:0};
+    weeks[key].income += s.cash + s.online;
+    weeks[key].km += (s.endOdo - s.startOdo);
+    weeks[key].hours += ((new Date(s.date+'T'+s.endTime)) - (new Date(s.date+'T'+s.startTime))) / 3600000;
   });
-  Object.keys(map).forEach(dateStr=>{
-    const m = map[dateStr];
-    const fuelCost = avgCostPerKm * m.km;
-    m.breakeven = fixedDaily + loanDaily + fuelCost;
-    m.profit = m.income - m.breakeven;
+  Object.values(weeks).forEach(w=>{
+    const fuelCost = avgCostPerKm * w.km;
+    w.breakeven = fixedDaily*7 + loanDaily*7 + fuelCost;
+    w.profit = w.income - w.breakeven;
   });
-  return map;
+  return weeks;
 }
-function renderCalendar(){
-  const base = calBaseDate();
-  const labelEl = document.getElementById('cal-month-label');
-  if(!labelEl) return; // dashboard not yet in DOM
-  labelEl.textContent = base.toLocaleDateString('en-IN', {month:'long', year:'numeric'});
-  const container = document.getElementById('calendar-container');
-  if(calView==='grid') renderCalendarGrid(container, base); else renderCalendarList(container, base);
-}
-function renderCalendarGrid(container, base){
-  const year = base.getFullYear(), month = base.getMonth();
-  const map = computeMonthProfitMap(year, month);
-  const startWeekday = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const todayStrVal = todayStr();
-
-  let html = '<div class="cal-grid">';
-  ['S','M','T','W','T','F','S'].forEach(d=>{ html += `<div class="cal-weekday">${d}</div>`; });
-  for(let i=0;i<startWeekday;i++){ html += '<div class="cal-day empty"></div>'; }
-  for(let day=1; day<=daysInMonth; day++){
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const stat = map[dateStr];
-    let cls = 'cal-day';
-    if(stat) cls += stat.profit>=0 ? ' profit' : ' loss';
-    if(dateStr===todayStrVal) cls += ' today';
-    let valText = '';
-    if(stat){
-      const v = stat.profit;
-      valText = (Math.abs(v)>=1000 ? (v/1000).toFixed(1)+'k' : Math.round(v));
-      valText = (v>=0?'+':'') + valText;
-    }
-    html += `<div class="${cls}" ${stat?`onclick="showDayDetail('${dateStr}')"`:''}>
-        <div class="daynum">${day}</div>
-        ${stat?`<div class="dayval">${valText}</div>`:''}
-      </div>`;
-  }
-  html += '</div>';
-  container.innerHTML = html;
-}
-function renderCalendarList(container, base){
-  const year = base.getFullYear(), month = base.getMonth();
-  const map = computeMonthProfitMap(year, month);
-  const dates = Object.keys(map).sort().reverse();
-  if(dates.length===0){ container.innerHTML = '<div class="empty">No sessions logged this month.</div>'; return; }
-  container.innerHTML = dates.map(dateStr=>{
-    const stat = map[dateStr];
-    const cls = stat.profit>=0 ? 'pos' : 'neg';
-    const label = new Date(dateStr).toLocaleDateString('en-IN', {weekday:'short', day:'numeric', month:'short'});
-    return `<div class="list-row" onclick="showDayDetail('${dateStr}')">
+function renderWeeklyStatement(){
+  const el = document.getElementById('weekly-statement');
+  if(!el) return;
+  const weeks = computeWeeklyStats();
+  const keys = Object.keys(weeks).sort().reverse();
+  if(keys.length===0){ el.innerHTML = '<div class="empty">No sessions logged yet.</div>'; return; }
+  el.innerHTML = keys.map(key=>{
+    const w = weeks[key];
+    const weekEnd = new Date(w.weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+    const label = `${w.weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
+    const cls = w.profit>=0 ? 'pos' : 'neg';
+    return `<div class="list-row">
       <div>
         <div class="main">${label}</div>
-        <div class="sub">${round2(stat.km||0)} km · income ${money(round2(stat.income))}</div>
+        <div class="sub">${round2(w.hours)}h online · ${round2(w.km)} km</div>
       </div>
-      <div class="amt cal-list-amt ${cls}">${stat.profit>=0?'+':''}${money(round2(stat.profit))}</div>
+      <div class="amt cal-list-amt ${cls}">${w.profit>=0?'+':''}${money(round2(w.profit))}</div>
     </div>`;
   }).join('');
 }
-function showDayDetail(dateStr){
-  const [y,m] = dateStr.split('-').map(Number);
-  const map = computeMonthProfitMap(y, m-1);
-  const stat = map[dateStr];
-  if(!stat) return;
-  showAlert(`${dateStr}\n\nkm driven: ${round2(stat.km)}\nIncome: ${money(round2(stat.income))}\nBreakeven: ${money(round2(stat.breakeven))}\nProfit: ${money(round2(stat.profit))}`);
-}
 
-// ================= INIT =================
 // ================= BACKUP, SNAPSHOT & SAFETY NET =================
 const DATA_KEYS = ['betafleet_sessions','betafleet_fuel','betafleet_expenses','betafleet_loan','betafleet_personal'];
 const SNAPSHOT_KEY = 'betafleet_snapshot';
