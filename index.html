@@ -280,6 +280,26 @@ if('serviceWorker' in navigator){
       <div class="stat"><div class="k">Today's km</div><div class="v neu" id="today-km">0</div></div>
       <div class="stat"><div class="k">Today's Income</div><div class="v neu" id="today-income">₹0</div></div>
     </div>
+
+    <div class="card">
+      <h2>Quick Expense</h2>
+      <div class="row" id="qe-category-row">
+        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Toll" onclick="selectQuickExpenseCategory('Toll')" style="margin-top:0;">🛣️ Toll</button>
+        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Parking" onclick="selectQuickExpenseCategory('Parking')" style="margin-top:0;">🅿️ Parking</button>
+        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Washing" onclick="selectQuickExpenseCategory('Washing')" style="margin-top:0;">🧼 Wash</button>
+      </div>
+      <div id="qe-amount-row" style="display:none; margin-top:12px;">
+        <label id="qe-selected-label">Amount (₹)</label>
+        <input type="number" inputmode="decimal" id="qe-amount">
+        <div class="chip-row-replacement" style="display:flex; gap:8px; margin-top:8px;">
+          <button type="button" class="btn btn-primary" style="margin-top:0; flex:1;" onclick="saveQuickExpense()">Save</button>
+          <button type="button" class="btn btn-ghost" style="margin-top:0; flex:1;" onclick="cancelQuickExpense()">Cancel</button>
+        </div>
+      </div>
+      <div class="helptext">Tap a category, enter the amount, save — these count as real costs and are subtracted from your profit on the Dashboard, same as fuel.</div>
+    </div>
+    <div class="card" id="quick-expense-history"></div>
+
     <div class="divider-label">Today's Sessions</div>
     <div class="card" id="work-history"></div>
 
@@ -338,6 +358,7 @@ if('serviceWorker' in navigator){
     <div class="segmented">
       <button class="active" id="seg-fixed" onclick="switchExpSeg('fixed')">Fixed Expenses</button>
       <button id="seg-loan" onclick="switchExpSeg('loan')">Loan</button>
+      <button id="seg-variable" onclick="switchExpSeg('variable')">Quick & Maint.</button>
     </div>
 
     <div id="exp-fixed-panel">
@@ -397,6 +418,52 @@ if('serviceWorker' in navigator){
       <div class="divider-label">Prepayments Logged</div>
       <div class="card" id="pp-list"></div>
     </div>
+
+    <div id="exp-variable-panel" style="display:none;">
+      <div class="card">
+        <h2>Quick Expense</h2>
+        <div class="segmented" id="qe-category-selector">
+          <button class="active" onclick="selectQECategory('Toll', this)">Toll</button>
+          <button onclick="selectQECategory('Parking', this)">Parking</button>
+          <button onclick="selectQECategory('Washing', this)">Washing</button>
+        </div>
+        <label>Amount (₹)</label>
+        <input type="number" inputmode="decimal" id="qe-amount" placeholder="50">
+        <button class="btn btn-primary" onclick="saveQuickExpense()">Log Expense</button>
+        <div class="helptext">Tolls, parking, and washing count as real costs and are now subtracted from your profit on the Dashboard and Weekly Statement — same as fuel.</div>
+      </div>
+      <div class="divider-label">Today's Quick Expenses</div>
+      <div class="card" id="quick-expense-history"></div>
+
+      <div class="divider-label">Maintenance & Servicing</div>
+      <div class="card">
+        <h2>Log a Service</h2>
+        <label>Service Type</label>
+        <select id="mt-type">
+          <option>General Service</option>
+          <option>Oil Change</option>
+          <option>Tire Rotation/Replacement</option>
+          <option>Brake Service</option>
+          <option>Battery</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+        <input type="text" id="mt-type-other" placeholder="Enter custom service type" style="margin-top:8px; display:none;">
+        <div class="row">
+          <div><label>Service Date</label><input type="date" id="mt-date"></div>
+          <div><label>Odometer (km)</label><input type="number" inputmode="decimal" id="mt-odo"></div>
+        </div>
+        <label>Cost (₹)</label>
+        <input type="number" inputmode="decimal" id="mt-cost" placeholder="1500">
+        <div class="row">
+          <div><label>Next Due Odometer (optional)</label><input type="number" inputmode="decimal" id="mt-next-odo" placeholder="e.g. 22000"></div>
+          <div><label>Next Due Date (optional)</label><input type="date" id="mt-next-date"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveMaintenance()">Log Service</button>
+        <div class="helptext">Set either or both "next due" fields — you'll get a warning when you're within 500 km or 30 days of whichever comes first, same logic as real service schedules. Service cost is also subtracted from your profit like other expenses.</div>
+      </div>
+      <div class="divider-label">Service History</div>
+      <div class="card" id="maintenance-history"></div>
+    </div>
   </section>
 
   <!-- DASHBOARD TAB -->
@@ -418,6 +485,8 @@ if('serviceWorker' in navigator){
         <div class="stat"><div class="k">Breakeven Target</div><div class="v" id="dash-breakeven">₹0</div></div>
         <div class="stat"><div class="k">km Driven</div><div class="v" id="dash-km">0</div></div>
         <div class="stat"><div class="k">Avg Cost / km</div><div class="v neu" id="dash-costperkm">—</div></div>
+        <div class="stat"><div class="k">Tolls/Parking/Wash</div><div class="v" id="dash-quickexp">₹0</div></div>
+        <div class="stat"><div class="k">Maintenance</div><div class="v" id="dash-maintexp">₹0</div></div>
       </div>
     </div>
     <div class="card">
@@ -648,6 +717,9 @@ let fuelEntries = [];
 let fixedExpenses = [];
 let loan = null; // {principal, rate, tenureMonths, startDate, prepayments:[]}
 let personalTrips = [];
+let quickExpenses = [];
+let maintenanceRecords = [];
+let selectedQECategory = 'Toll';
 
 const money = n => '₹' + Number(n||0).toLocaleString('en-IN', {maximumFractionDigits:0});
 const round2 = n => Math.round(n*100)/100;
@@ -703,35 +775,85 @@ function renderWork(){
     attachOdoContinuity('start-odo', 'start-odo-warning');
     createSwipeButton(document.getElementById('start-swipe'), 'Slide to Start Work  ➜', startWork);
   } else {
-    container.innerHTML = `
-      <div class="meter">
-        <div class="flag"><span class="pulse"></span><span class="label">Hired · Session Running</span></div>
-        <div class="big" id="elapsed-display">00:00</div>
-        <div class="meta">since ${open.startTime} · start odo ${open.startOdo} km</div>
-      </div>
-      <div class="card">
-        <h2>End Session</h2>
-        <label>Ending Odometer (km)</label>
-        <input type="number" inputmode="decimal" id="end-odo" placeholder="must be more than ${open.startOdo}">
-        <div class="row">
-          <div>
-            <label>Cash Revenue (₹)</label>
-            <input type="number" inputmode="decimal" id="end-cash" placeholder="0">
-          </div>
-          <div>
-            <label>Online Revenue (₹)</label>
-            <input type="number" inputmode="decimal" id="end-online" placeholder="0">
+    const paused = isPaused(open);
+    const totalBreakMin = getSessionBreakMinutes(open);
+    if(paused){
+      const lastPause = open.pauses[open.pauses.length-1];
+      container.innerHTML = `
+        <div class="meter">
+          <div class="flag"><span class="label" style="color:var(--text-dim);">⏸ On Break</span></div>
+          <div class="big" id="elapsed-display">00:00</div>
+          <div class="meta">break started ${lastPause.startTime} · ${totalBreakMin}m on break so far today</div>
+        </div>
+        <div class="sticky-cta">
+          <div id="resume-swipe"></div>
+        </div>`;
+      createSwipeButton(document.getElementById('resume-swipe'), 'Slide to Resume  ➜', endBreak);
+    } else {
+      container.innerHTML = `
+        <div class="meter">
+          <div class="flag"><span class="pulse"></span><span class="label">Hired · Session Running</span></div>
+          <div class="big" id="elapsed-display">00:00</div>
+          <div class="meta">since ${open.startTime} · start odo ${open.startOdo} km${totalBreakMin>0?` · ${totalBreakMin}m on break so far`:''}</div>
+        </div>
+        <div class="card">
+          <h2>End Session</h2>
+          <label>Ending Odometer (km)</label>
+          <input type="number" inputmode="decimal" id="end-odo" placeholder="must be more than ${open.startOdo}">
+          <div class="row">
+            <div>
+              <label>Cash Revenue (₹)</label>
+              <input type="number" inputmode="decimal" id="end-cash" placeholder="0">
+            </div>
+            <div>
+              <label>Online Revenue (₹)</label>
+              <input type="number" inputmode="decimal" id="end-online" placeholder="0">
+            </div>
           </div>
         </div>
-      </div>
-      <div class="sticky-cta">
-        <div id="end-swipe"></div>
-      </div>`;
-    createSwipeButton(document.getElementById('end-swipe'), 'Slide to End Session  ➜', endWork);
+        <button class="btn btn-ghost" onclick="startBreak()">⏸ Take a Break</button>
+        <div class="sticky-cta">
+          <div id="end-swipe"></div>
+        </div>`;
+      createSwipeButton(document.getElementById('end-swipe'), 'Slide to End Session  ➜', endWork);
+    }
     updateElapsedDisplay();
   }
   renderWorkHistory();
   renderPersonalTrips();
+}
+
+function isPaused(session){
+  return !!(session.pauses && session.pauses.length>0 && session.pauses[session.pauses.length-1].endTime===null);
+}
+function getSessionBreakMinutes(session){
+  if(!session.pauses) return 0;
+  return session.pauses.reduce((sum,p)=>{
+    if(!p.endTime) return sum;
+    const mins = (new Date(session.date+'T'+p.endTime) - new Date(session.date+'T'+p.startTime))/60000;
+    return sum + mins;
+  },0);
+}
+async function startBreak(){
+  const open = sessions.find(s=>s.status==='Open');
+  if(!open || isPaused(open)) return false;
+  const loc = await getGpsLocation();
+  if(!open.pauses) open.pauses = [];
+  open.pauses.push({startTime: nowTimeStr(), startLoc: loc, endTime: null, endLoc: null});
+  save('betafleet_sessions', sessions);
+  renderWork();
+  return true;
+}
+async function endBreak(){
+  const open = sessions.find(s=>s.status==='Open');
+  if(!open || !isPaused(open)) return false;
+  const loc = await getGpsLocation();
+  const currentPause = open.pauses[open.pauses.length-1];
+  currentPause.endTime = nowTimeStr();
+  currentPause.endLoc = loc;
+  save('betafleet_sessions', sessions);
+  renderWork();
+  return true;
 }
 
 function updateElapsedDisplay(){
@@ -763,6 +885,11 @@ async function endWork(){
   const cash = Number(document.getElementById('end-cash').value || 0);
   const online = Number(document.getElementById('end-online').value || 0);
   if(!endOdo || endOdo <= open.startOdo){ showAlert('Ending odometer must be greater than starting odometer ('+open.startOdo+')'); return false; }
+  if(isPaused(open)){
+    // don't leave a break dangling open forever if they end the session mid-break
+    const lastPause = open.pauses[open.pauses.length-1];
+    lastPause.endTime = nowTimeStr();
+  }
   const loc = await getGpsLocation();
   open.endOdo = endOdo; open.cash = cash; open.online = online;
   open.endTime = nowTimeStr(); open.status = 'Closed';
@@ -896,7 +1023,57 @@ function renderPersonalTrips(){
     </div>`).join('');
 }
 
-// ================= FUEL TAB =================
+// ================= QUICK EXPENSES (one-tap: Toll/Parking/Washing) =================
+function selectQuickExpenseCategory(cat){
+  qeSelectedCategory = cat;
+  document.getElementById('qe-selected-label').textContent = `${cat} Amount (₹)`;
+  document.getElementById('qe-amount-row').style.display = 'block';
+  // Prefill with the last amount used for this category — most tolls/parking are repeat amounts
+  const lastForCat = [...quickExpenses].reverse().find(e=>e.category===cat);
+  const amountEl = document.getElementById('qe-amount');
+  amountEl.value = lastForCat ? lastForCat.amount : '';
+  amountEl.focus();
+}
+function cancelQuickExpense(){
+  qeSelectedCategory = null;
+  document.getElementById('qe-amount-row').style.display = 'none';
+  document.getElementById('qe-amount').value = '';
+}
+function saveQuickExpense(){
+  const amount = Number(document.getElementById('qe-amount').value);
+  if(!qeSelectedCategory || !amount){ showAlert('Enter an amount'); return; }
+  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category:qeSelectedCategory, amount});
+  save('betafleet_quickexpenses', quickExpenses);
+  cancelQuickExpense();
+  renderQuickExpenseHistory();
+  vibrate(10);
+}
+async function deleteQuickExpense(id){
+  if(!await showConfirm('Delete this expense?')) return;
+  quickExpenses = quickExpenses.filter(e=>e.id!==id);
+  save('betafleet_quickexpenses', quickExpenses);
+  renderQuickExpenseHistory();
+}
+function renderQuickExpenseHistory(){
+  const el = document.getElementById('quick-expense-history');
+  if(!el) return;
+  const today = todayStr();
+  const todays = quickExpenses.filter(e=>e.date===today).sort((a,b)=>b.time.localeCompare(a.time));
+  if(todays.length===0){ el.innerHTML = '<div class="empty">No expenses logged today.</div>'; return; }
+  const icons = {Toll:'🛣️', Parking:'🅿️', Washing:'🧼'};
+  el.innerHTML = todays.map(e=>`
+    <div class="list-row">
+      <div>
+        <div class="main">${icons[e.category]||''} ${e.category}</div>
+        <div class="sub">${e.time}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt" style="color:var(--red);">-${money(e.amount)}</div>
+        <button class="del" onclick="deleteQuickExpense('${e.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
 function fuelSorted(){
   return [...fuelEntries].sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
 }
@@ -975,9 +1152,14 @@ function renderFuelHistory(){
 function switchExpSeg(seg){
   document.getElementById('seg-fixed').classList.toggle('active', seg==='fixed');
   document.getElementById('seg-loan').classList.toggle('active', seg==='loan');
+  document.getElementById('seg-variable').classList.toggle('active', seg==='variable');
   document.getElementById('exp-fixed-panel').style.display = seg==='fixed'?'block':'none';
   document.getElementById('exp-loan-panel').style.display = seg==='loan'?'block':'none';
+  document.getElementById('exp-variable-panel').style.display = seg==='variable'?'block':'none';
 }
+document.getElementById('mt-type').addEventListener('change', e=>{
+  document.getElementById('mt-type-other').style.display = e.target.value==='__other' ? 'block' : 'none';
+});
 document.getElementById('fx-type').addEventListener('change', e=>{
   document.getElementById('fx-type-other').style.display = e.target.value==='__other' ? 'block' : 'none';
 });
@@ -1013,11 +1195,11 @@ function getUrgentRenewals(){
   }).filter(fx=>fx.daysLeft<=30).sort((a,b)=>a.daysLeft-b.daysLeft);
 }
 function updateRenewalNavBadge(){
-  const urgent = getUrgentRenewals();
+  const urgent = getUrgentRenewals().length + getUrgentMaintenance().length;
   const navBtn = document.getElementById('nav-expenses');
   if(!navBtn) return;
   let dot = navBtn.querySelector('.nav-alert-dot');
-  if(urgent.length > 0){
+  if(urgent > 0){
     if(!dot){
       dot = document.createElement('span');
       dot.className = 'nav-alert-dot';
@@ -1063,7 +1245,128 @@ function totalDailyFixedCost(){
   return fixedExpenses.reduce((s,fx)=>s+fxDailyCost(fx),0);
 }
 
-// ---- Loan ----
+// ================= QUICK EXPENSES =================
+function selectQECategory(cat, btn){
+  selectedQECategory = cat;
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function saveQuickExpense(){
+  const amount = Number(document.getElementById('qe-amount').value);
+  if(!amount){ showAlert('Enter an amount'); return; }
+  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category:selectedQECategory, amount});
+  save('betafleet_quickexpenses', quickExpenses);
+  document.getElementById('qe-amount').value='';
+  renderQuickExpenseHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+async function deleteQuickExpense(id){
+  if(!await showConfirm('Delete this expense?')) return;
+  quickExpenses = quickExpenses.filter(q=>q.id!==id);
+  save('betafleet_quickexpenses', quickExpenses);
+  renderQuickExpenseHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+function renderQuickExpenseHistory(){
+  const el = document.getElementById('quick-expense-history');
+  if(!el) return;
+  const today = todayStr();
+  const todays = quickExpenses.filter(q=>q.date===today).sort((a,b)=>b.time.localeCompare(a.time));
+  if(todays.length===0){ el.innerHTML = '<div class="empty">No quick expenses logged today.</div>'; return; }
+  el.innerHTML = todays.map(q=>`
+    <div class="list-row">
+      <div><div class="main">${q.category}</div><div class="sub">${q.time}</div></div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${money(q.amount)}</div>
+        <button class="del" onclick="deleteQuickExpense('${q.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+// Sums quick expenses + maintenance costs whose date falls within [start,end] (inclusive).
+// This is the "variable costs" figure that gets subtracted from profit alongside fuel.
+function sumVariableExpensesInRange(start, end){
+  const inRange = dateStr => { const d = new Date(dateStr); return d>=start && d<=end; };
+  const qe = quickExpenses.filter(q=>inRange(q.date)).reduce((s,q)=>s+q.amount,0);
+  const mt = maintenanceRecords.filter(m=>inRange(m.serviceDate)).reduce((s,m)=>s+m.cost,0);
+  return qe + mt;
+}
+
+// ================= MAINTENANCE & SERVICING =================
+function initMaintenanceForm(){
+  document.getElementById('mt-date').value = todayStr();
+  const lastOdo = getLastKnownOdometer();
+  if(lastOdo!=null) document.getElementById('mt-odo').value = lastOdo;
+}
+function saveMaintenance(){
+  const typeSel = document.getElementById('mt-type').value;
+  const serviceType = typeSel==='__other' ? (document.getElementById('mt-type-other').value || 'Other') : typeSel;
+  const serviceDate = document.getElementById('mt-date').value;
+  const odometerAtService = Number(document.getElementById('mt-odo').value);
+  const cost = Number(document.getElementById('mt-cost').value);
+  const nextDueOdoVal = document.getElementById('mt-next-odo').value;
+  const nextDueDateVal = document.getElementById('mt-next-date').value;
+  if(!serviceDate || !odometerAtService || !cost){ showAlert('Fill in service date, odometer, and cost'); return; }
+  maintenanceRecords.push({
+    id: uid('MT'), serviceType, serviceDate, odometerAtService, cost,
+    nextDueOdometer: nextDueOdoVal ? Number(nextDueOdoVal) : null,
+    nextDueDate: nextDueDateVal || null
+  });
+  save('betafleet_maintenance', maintenanceRecords);
+  document.getElementById('mt-cost').value='';
+  document.getElementById('mt-next-odo').value='';
+  document.getElementById('mt-next-date').value='';
+  renderMaintenanceHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+async function deleteMaintenance(id){
+  if(!await showConfirm('Delete this service record?')) return;
+  maintenanceRecords = maintenanceRecords.filter(m=>m.id!==id);
+  save('betafleet_maintenance', maintenanceRecords);
+  renderMaintenanceHistory();
+}
+// Returns records that are due soon/overdue by EITHER km or date criterion (whichever
+// comes first), mirroring how real service intervals work.
+function getUrgentMaintenance(){
+  const currentOdo = getLastKnownOdometer();
+  const today = new Date();
+  return maintenanceRecords.map(m=>{
+    let kmLeft = null, daysLeft = null;
+    if(m.nextDueOdometer!=null && currentOdo!=null) kmLeft = m.nextDueOdometer - currentOdo;
+    if(m.nextDueDate) daysLeft = Math.round((new Date(m.nextDueDate)-today)/(1000*60*60*24));
+    return {...m, kmLeft, daysLeft};
+  }).filter(m=>{
+    const kmUrgent = m.kmLeft!=null && m.kmLeft<=500;
+    const dateUrgent = m.daysLeft!=null && m.daysLeft<=30;
+    return kmUrgent || dateUrgent;
+  }).sort((a,b)=>{
+    const aMin = Math.min(a.kmLeft??Infinity, (a.daysLeft??Infinity)*1000); // rough combined sort
+    const bMin = Math.min(b.kmLeft??Infinity, (b.daysLeft??Infinity)*1000);
+    return aMin-bMin;
+  });
+}
+function renderMaintenanceHistory(){
+  const el = document.getElementById('maintenance-history');
+  if(!el) return;
+  if(maintenanceRecords.length===0){ el.innerHTML = '<div class="empty">No service records yet.</div>'; updateRenewalNavBadge(); return; }
+  const sorted = [...maintenanceRecords].sort((a,b)=>b.serviceDate.localeCompare(a.serviceDate));
+  el.innerHTML = sorted.map(m=>{
+    let dueText = '';
+    if(m.nextDueOdometer!=null) dueText += `next @ ${m.nextDueOdometer} km`;
+    if(m.nextDueDate) dueText += (dueText?' or ':'') + `by ${m.nextDueDate}`;
+    return `<div class="list-row">
+      <div>
+        <div class="main">${m.serviceType}</div>
+        <div class="sub">${m.serviceDate} · ${m.odometerAtService} km${dueText?' · '+dueText:''}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${money(m.cost)}</div>
+        <button class="del" onclick="deleteMaintenance('${m.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateRenewalNavBadge();
+}
+
 function emiOf(l){
   const r = l.rate/1200, n = l.tenureMonths;
   return l.principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
@@ -1198,16 +1501,25 @@ function renderDashboard(){
   renderSnapshotInfo();
   renderExportReminder();
 
-  const urgent = getUrgentRenewals();
+  const urgentRenewals = getUrgentRenewals();
+  const urgentMaint = getUrgentMaintenance();
   const bannerEl = document.getElementById('renewal-banner');
   if(bannerEl){
-    if(urgent.length===0){ bannerEl.innerHTML=''; }
+    if(urgentRenewals.length===0 && urgentMaint.length===0){ bannerEl.innerHTML=''; }
     else {
-      const lines = urgent.map(fx=>{
+      const renewalLines = urgentRenewals.map(fx=>{
         const label = fx.daysLeft<0 ? `expired ${Math.abs(fx.daysLeft)} day${Math.abs(fx.daysLeft)===1?'':'s'} ago` : `expires in ${fx.daysLeft} day${fx.daysLeft===1?'':'s'}`;
         return `${fx.type} — ${label}`;
-      }).join('<br>');
-      bannerEl.innerHTML = `<div class="renewal-banner"><div class="title">⚠ Renewal${urgent.length>1?'s':''} needing attention</div>${lines}</div>`;
+      });
+      const maintLines = urgentMaint.map(m=>{
+        const parts = [];
+        if(m.kmLeft!=null) parts.push(m.kmLeft<0 ? `${Math.abs(Math.round(m.kmLeft))} km overdue` : `${Math.round(m.kmLeft)} km left`);
+        if(m.daysLeft!=null) parts.push(m.daysLeft<0 ? `${Math.abs(m.daysLeft)}d overdue` : `${m.daysLeft}d left`);
+        return `${m.serviceType} — ${parts.join(' or ')}`;
+      });
+      const allLines = [...renewalLines, ...maintLines].join('<br>');
+      const count = urgentRenewals.length + urgentMaint.length;
+      bannerEl.innerHTML = `<div class="renewal-banner"><div class="title">⚠ ${count} item${count>1?'s':''} needing attention</div>${allLines}</div>`;
     }
   }
 
@@ -1225,8 +1537,14 @@ function renderDashboard(){
   const fixedDaily = totalDailyFixedCost();
   const loanDaily = dailyLoanCost();
   const fuelCost = avgCostPerKm * km;
-  const breakeven = (fixedDaily + loanDaily) * days + fuelCost;
+  const quickExpTotal = quickExpenses.filter(e=>inRange(e.date)).reduce((s,e)=>s+e.amount,0);
+  const maintExpTotal = maintenanceRecords.filter(m=>inRange(m.serviceDate)).reduce((s,m)=>s+m.cost,0);
+  const breakeven = (fixedDaily + loanDaily) * days + fuelCost + quickExpTotal + maintExpTotal;
   const profit = income - breakeven;
+  const qeEl = document.getElementById('dash-quickexp');
+  if(qeEl) qeEl.textContent = money(round2(quickExpTotal));
+  const mtEl = document.getElementById('dash-maintexp');
+  if(mtEl) mtEl.textContent = money(round2(maintExpTotal));
 
   document.getElementById('dash-income').textContent = money(round2(income));
   document.getElementById('dash-breakeven').textContent = money(round2(breakeven));
@@ -1236,7 +1554,10 @@ function renderDashboard(){
   document.getElementById('profit-hero').className = 'hero-profit ' + (profit>=0 ? 'pos' : 'neg');
   document.getElementById('dash-km').textContent = km + ' km';
 
-  const hours = closed.reduce((s,x)=>s+((new Date(x.date+'T'+x.endTime))-(new Date(x.date+'T'+x.startTime)))/3600000,0);
+  const hours = closed.reduce((s,x)=>{
+    const gross = ((new Date(x.date+'T'+x.endTime))-(new Date(x.date+'T'+x.startTime)))/3600000;
+    return s + Math.max(0, gross - getSessionBreakMinutes(x)/60);
+  },0);
   const revenueAfterFuel = income - fuelCost;
   const revFuelEl = document.getElementById('dash-revfuel');
   const revHrEl = document.getElementById('dash-revhr');
@@ -1272,17 +1593,30 @@ function computeWeeklyStats(){
   const fixedDaily = totalDailyFixedCost();
   const loanDaily = dailyLoanCost();
   const weeks = {};
+  const ensure = key => { if(!weeks[key]) weeks[key] = {weekStart:new Date(key), income:0, km:0, hours:0, quickExp:0, maintExp:0}; };
   sessions.filter(s=>s.status==='Closed').forEach(s=>{
     const weekStart = getWeekStart(s.date);
     const key = weekStart.toISOString().slice(0,10);
-    if(!weeks[key]) weeks[key] = {weekStart, income:0, km:0, hours:0};
+    ensure(key);
     weeks[key].income += s.cash + s.online;
     weeks[key].km += (s.endOdo - s.startOdo);
-    weeks[key].hours += ((new Date(s.date+'T'+s.endTime)) - (new Date(s.date+'T'+s.startTime))) / 3600000;
+    const grossHours = ((new Date(s.date+'T'+s.endTime)) - (new Date(s.date+'T'+s.startTime))) / 3600000;
+    const breakHours = getSessionBreakMinutes(s) / 60;
+    weeks[key].hours += Math.max(0, grossHours - breakHours);
+  });
+  quickExpenses.forEach(e=>{
+    const key = getWeekStart(e.date).toISOString().slice(0,10);
+    ensure(key);
+    weeks[key].quickExp += e.amount;
+  });
+  maintenanceRecords.forEach(m=>{
+    const key = getWeekStart(m.serviceDate).toISOString().slice(0,10);
+    ensure(key);
+    weeks[key].maintExp += m.cost;
   });
   Object.values(weeks).forEach(w=>{
     const fuelCost = avgCostPerKm * w.km;
-    w.breakeven = fixedDaily*7 + loanDaily*7 + fuelCost;
+    w.breakeven = fixedDaily*7 + loanDaily*7 + fuelCost + w.quickExp + w.maintExp;
     w.profit = w.income - w.breakeven;
   });
   return weeks;
@@ -1309,7 +1643,7 @@ function renderWeeklyStatement(){
 }
 
 // ================= BACKUP, SNAPSHOT & SAFETY NET =================
-const DATA_KEYS = ['betafleet_sessions','betafleet_fuel','betafleet_expenses','betafleet_loan','betafleet_personal'];
+const DATA_KEYS = ['betafleet_sessions','betafleet_fuel','betafleet_expenses','betafleet_loan','betafleet_personal','betafleet_quickexpenses','betafleet_maintenance'];
 const SNAPSHOT_KEY = 'betafleet_snapshot';
 const LAST_EXPORT_KEY = 'betafleet_last_export_at';
 const EXPORT_REMINDER_DAYS = 14;
@@ -1571,11 +1905,16 @@ async function init(){
   loan = await loadObj('betafleet_loan');
   if(loan && !loan.prepayments) loan.prepayments = [];
   personalTrips = await loadArr('betafleet_personal');
+  quickExpenses = await loadArr('betafleet_quickexpenses');
+  maintenanceRecords = await loadArr('betafleet_maintenance');
 
   initFuelForm();
   initPersonalTripForm();
+  initMaintenanceForm();
   initShareBackupButton();
   renderWork();
+  renderQuickExpenseHistory();
+  renderMaintenanceHistory();
   renderFuelHistory();
   renderFixedExpenses();
   renderLoan();
