@@ -280,24 +280,6 @@ if('serviceWorker' in navigator){
       <div class="stat"><div class="k">Today's km</div><div class="v neu" id="today-km">0</div></div>
       <div class="stat"><div class="k">Today's Income</div><div class="v neu" id="today-income">₹0</div></div>
     </div>
-
-    <div class="card">
-      <h2>Quick Expense</h2>
-      <div class="row" id="qe-category-row">
-        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Toll" onclick="selectQuickExpenseCategory('Toll')" style="margin-top:0;">🛣️ Toll</button>
-        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Parking" onclick="selectQuickExpenseCategory('Parking')" style="margin-top:0;">🅿️ Parking</button>
-        <button type="button" class="btn btn-ghost qe-cat-btn" data-cat="Washing" onclick="selectQuickExpenseCategory('Washing')" style="margin-top:0;">🧼 Wash</button>
-      </div>
-      <div id="qe-amount-row" style="display:none; margin-top:12px;">
-        <label id="qe-selected-label">Amount (₹)</label>
-        <input type="number" inputmode="decimal" id="qe-amount">
-        <div class="chip-row-replacement" style="display:flex; gap:8px; margin-top:8px;">
-          <button type="button" class="btn btn-primary" style="margin-top:0; flex:1;" onclick="saveQuickExpense()">Save</button>
-          <button type="button" class="btn btn-ghost" style="margin-top:0; flex:1;" onclick="cancelQuickExpense()">Cancel</button>
-        </div>
-      </div>
-      <div class="helptext">Tap a category, enter the amount, save — these count as real costs and are subtracted from your profit on the Dashboard, same as fuel.</div>
-    </div>
     <div class="card" id="quick-expense-history"></div>
 
     <div class="divider-label">Today's Sessions</div>
@@ -422,15 +404,18 @@ if('serviceWorker' in navigator){
     <div id="exp-variable-panel" style="display:none;">
       <div class="card">
         <h2>Quick Expense</h2>
-        <div class="segmented" id="qe-category-selector">
-          <button class="active" onclick="selectQECategory('Toll', this)">Toll</button>
-          <button onclick="selectQECategory('Parking', this)">Parking</button>
-          <button onclick="selectQECategory('Washing', this)">Washing</button>
-        </div>
+        <label>Category</label>
+        <select id="qe-category">
+          <option>Food</option>
+          <option>Toll</option>
+          <option>Parking</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+        <input type="text" id="qe-category-other" placeholder="Enter custom category" style="margin-top:8px; display:none;">
         <label>Amount (₹)</label>
         <input type="number" inputmode="decimal" id="qe-amount" placeholder="50">
         <button class="btn btn-primary" onclick="saveQuickExpense()">Log Expense</button>
-        <div class="helptext">Tolls, parking, and washing count as real costs and are now subtracted from your profit on the Dashboard and Weekly Statement — same as fuel.</div>
+        <div class="helptext">These count as real costs and are subtracted from your profit on the Dashboard and Weekly Statement — same as fuel.</div>
       </div>
       <div class="divider-label">Today's Quick Expenses</div>
       <div class="card" id="quick-expense-history"></div>
@@ -485,7 +470,7 @@ if('serviceWorker' in navigator){
         <div class="stat"><div class="k">Breakeven Target</div><div class="v" id="dash-breakeven">₹0</div></div>
         <div class="stat"><div class="k">km Driven</div><div class="v" id="dash-km">0</div></div>
         <div class="stat"><div class="k">Avg Cost / km</div><div class="v neu" id="dash-costperkm">—</div></div>
-        <div class="stat"><div class="k">Tolls/Parking/Wash</div><div class="v" id="dash-quickexp">₹0</div></div>
+        <div class="stat"><div class="k">Quick Expenses</div><div class="v" id="dash-quickexp">₹0</div></div>
         <div class="stat"><div class="k">Maintenance</div><div class="v" id="dash-maintexp">₹0</div></div>
       </div>
     </div>
@@ -719,7 +704,6 @@ let loan = null; // {principal, rate, tenureMonths, startDate, prepayments:[]}
 let personalTrips = [];
 let quickExpenses = [];
 let maintenanceRecords = [];
-let selectedQECategory = 'Toll';
 
 const money = n => '₹' + Number(n||0).toLocaleString('en-IN', {maximumFractionDigits:0});
 const round2 = n => Math.round(n*100)/100;
@@ -1023,57 +1007,6 @@ function renderPersonalTrips(){
     </div>`).join('');
 }
 
-// ================= QUICK EXPENSES (one-tap: Toll/Parking/Washing) =================
-function selectQuickExpenseCategory(cat){
-  qeSelectedCategory = cat;
-  document.getElementById('qe-selected-label').textContent = `${cat} Amount (₹)`;
-  document.getElementById('qe-amount-row').style.display = 'block';
-  // Prefill with the last amount used for this category — most tolls/parking are repeat amounts
-  const lastForCat = [...quickExpenses].reverse().find(e=>e.category===cat);
-  const amountEl = document.getElementById('qe-amount');
-  amountEl.value = lastForCat ? lastForCat.amount : '';
-  amountEl.focus();
-}
-function cancelQuickExpense(){
-  qeSelectedCategory = null;
-  document.getElementById('qe-amount-row').style.display = 'none';
-  document.getElementById('qe-amount').value = '';
-}
-function saveQuickExpense(){
-  const amount = Number(document.getElementById('qe-amount').value);
-  if(!qeSelectedCategory || !amount){ showAlert('Enter an amount'); return; }
-  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category:qeSelectedCategory, amount});
-  save('betafleet_quickexpenses', quickExpenses);
-  cancelQuickExpense();
-  renderQuickExpenseHistory();
-  vibrate(10);
-}
-async function deleteQuickExpense(id){
-  if(!await showConfirm('Delete this expense?')) return;
-  quickExpenses = quickExpenses.filter(e=>e.id!==id);
-  save('betafleet_quickexpenses', quickExpenses);
-  renderQuickExpenseHistory();
-}
-function renderQuickExpenseHistory(){
-  const el = document.getElementById('quick-expense-history');
-  if(!el) return;
-  const today = todayStr();
-  const todays = quickExpenses.filter(e=>e.date===today).sort((a,b)=>b.time.localeCompare(a.time));
-  if(todays.length===0){ el.innerHTML = '<div class="empty">No expenses logged today.</div>'; return; }
-  const icons = {Toll:'🛣️', Parking:'🅿️', Washing:'🧼'};
-  el.innerHTML = todays.map(e=>`
-    <div class="list-row">
-      <div>
-        <div class="main">${icons[e.category]||''} ${e.category}</div>
-        <div class="sub">${e.time}</div>
-      </div>
-      <div style="display:flex; align-items:center;">
-        <div class="amt" style="color:var(--red);">-${money(e.amount)}</div>
-        <button class="del" onclick="deleteQuickExpense('${e.id}')">✕</button>
-      </div>
-    </div>`).join('');
-}
-
 function fuelSorted(){
   return [...fuelEntries].sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
 }
@@ -1246,17 +1179,18 @@ function totalDailyFixedCost(){
 }
 
 // ================= QUICK EXPENSES =================
-function selectQECategory(cat, btn){
-  selectedQECategory = cat;
-  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-}
+document.getElementById('qe-category').addEventListener('change', e=>{
+  document.getElementById('qe-category-other').style.display = e.target.value==='__other' ? 'block' : 'none';
+});
 function saveQuickExpense(){
+  const categorySel = document.getElementById('qe-category').value;
+  const category = categorySel==='__other' ? (document.getElementById('qe-category-other').value || 'Other') : categorySel;
   const amount = Number(document.getElementById('qe-amount').value);
   if(!amount){ showAlert('Enter an amount'); return; }
-  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category:selectedQECategory, amount});
+  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category, amount});
   save('betafleet_quickexpenses', quickExpenses);
   document.getElementById('qe-amount').value='';
+  document.getElementById('qe-category-other').value='';
   renderQuickExpenseHistory();
   if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
 }
