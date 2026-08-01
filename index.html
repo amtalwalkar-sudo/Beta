@@ -222,6 +222,23 @@ if('serviceWorker' in navigator){
   }
   .export-banner .title{ font-family:var(--display); font-weight:600; color:var(--led); font-size:13px; margin-bottom:4px; }
 
+  /* ---------- Quick Log icon row (Work tab, one-hand fast entry) ---------- */
+  .qe-quick-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
+  .qe-quick-btn{
+    display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 4px;
+    border-radius:12px; border:1px solid var(--divider); background:var(--surface);
+    font-family:var(--sans); font-size:10.5px; font-weight:600; color:var(--text);
+    transition:transform .1s ease;
+  }
+  .qe-quick-btn:active{ transform:scale(0.93); }
+  .qe-quick-btn .qe-icon{ font-size:20px; }
+  .qe-food{ border-color:rgba(255,176,32,0.4); background:rgba(255,176,32,0.08); }
+  .qe-toll{ border-color:rgba(79,168,255,0.4); background:rgba(79,168,255,0.08); }
+  .qe-parking{ border-color:rgba(52,209,180,0.4); background:rgba(52,209,180,0.08); }
+  .qe-other{ border-color:var(--divider); background:var(--surface-2); }
+  summary::-webkit-details-marker{ display:none; }
+  summary{ outline:none; }
+
   /* ---------- Swipe-to-confirm slider (Start Work / End Session) ---------- */
   .swipe-wrap{ margin-top:18px; }
   .swipe-track{
@@ -280,31 +297,35 @@ if('serviceWorker' in navigator){
       <div class="stat"><div class="k">Today's km</div><div class="v neu" id="today-km">0</div></div>
       <div class="stat"><div class="k">Today's Income</div><div class="v neu" id="today-income">₹0</div></div>
     </div>
-    <div class="card" id="quick-expense-history"></div>
+
+    <div class="qe-quick-row">
+      <button class="qe-quick-btn qe-food" onclick="quickLogExpense('Food')"><span class="qe-icon">🍔</span><span>Food</span></button>
+      <button class="qe-quick-btn qe-toll" onclick="quickLogExpense('Toll')"><span class="qe-icon">🛣️</span><span>Toll</span></button>
+      <button class="qe-quick-btn qe-parking" onclick="quickLogExpense('Parking')"><span class="qe-icon">🅿️</span><span>Parking</span></button>
+      <button class="qe-quick-btn qe-other" onclick="quickLogExpense('Other')"><span class="qe-icon">➕</span><span>Other</span></button>
+    </div>
 
     <div class="divider-label">Today's Sessions</div>
     <div class="card" id="work-history"></div>
 
-    <div class="divider-label">Personal Use</div>
-    <div class="card">
-      <h2>Log a Personal Trip</h2>
-      <label>Date</label>
-      <input type="date" id="pt-date">
-      <div class="row">
-        <div><label>Start Odometer (km)</label><input type="number" inputmode="decimal" id="pt-start-odo"></div>
-        <div><label>End Odometer (km)</label><input type="number" inputmode="decimal" id="pt-end-odo"></div>
+    <details id="personal-trip-details">
+      <summary class="divider-label" style="cursor:pointer; list-style:none;">▸ Personal Use</summary>
+      <div class="card">
+        <h2>Log a Personal Trip</h2>
+        <label>Date</label>
+        <input type="date" id="pt-date">
+        <div class="row">
+          <div><label>Start Odometer (km)</label><input type="number" inputmode="decimal" id="pt-start-odo"></div>
+          <div><label>End Odometer (km)</label><input type="number" inputmode="decimal" id="pt-end-odo"></div>
+        </div>
+        <div class="helptext" id="pt-odo-warning" style="min-height:14px;"></div>
+        <label>Note (optional)</label>
+        <input type="text" id="pt-note" placeholder="e.g. family visit">
+        <button class="btn btn-ghost" onclick="savePersonalTrip()">Log Personal Trip</button>
+        <div class="helptext">Personal trips don't count as income and their km/fuel cost are excluded from the breakeven and profit calendar — logging them here just keeps your odometer and fuel records continuous and explainable.</div>
       </div>
-      <div class="helptext" id="pt-odo-warning" style="min-height:14px;"></div>
-      <label>Note (optional)</label>
-      <input type="text" id="pt-note" placeholder="e.g. family visit">
-      <button class="btn btn-ghost" onclick="savePersonalTrip()">Log Personal Trip</button>
-      <div class="helptext">Personal trips don't count as income and their km/fuel cost are excluded from the breakeven and profit calendar — logging them here just keeps your odometer and fuel records continuous and explainable.</div>
-    </div>
-    <div class="card" id="personal-history"></div>
-    <div class="card"><h2>Performance</h2><div class="stat-grid">
-      <div class="stat"><div class="k">Revenue After Fuel</div><div class="v neu" id="dash-revfuel">₹0</div></div>
-      <div class="stat"><div class="k">Revenue / Hour</div><div class="v neu" id="dash-revhr">₹0/hr</div></div>
-    </div></div>
+      <div class="card" id="personal-history"></div>
+    </details>
   </section>
 
   <!-- FUEL TAB -->
@@ -468,17 +489,18 @@ if('serviceWorker' in navigator){
       <div class="stat-grid">
         <div class="stat"><div class="k">Income</div><div class="v neu" id="dash-income">₹0</div></div>
         <div class="stat"><div class="k">Breakeven Target</div><div class="v" id="dash-breakeven">₹0</div></div>
+        <div class="stat"><div class="k">Revenue After Fuel</div><div class="v neu" id="dash-revfuel">₹0</div></div>
         <div class="stat"><div class="k">km Driven</div><div class="v" id="dash-km">0</div></div>
-        <div class="stat"><div class="k">Avg Cost / km</div><div class="v neu" id="dash-costperkm">—</div></div>
         <div class="stat"><div class="k">Quick Expenses</div><div class="v" id="dash-quickexp">₹0</div></div>
         <div class="stat"><div class="k">Maintenance</div><div class="v" id="dash-maintexp">₹0</div></div>
       </div>
     </div>
     <div class="card">
-      <h2>Fuel Mileage</h2>
+      <h2>Fuel Mileage & Rate</h2>
       <div class="stat-grid">
         <div class="stat"><div class="k">Avg km / kg</div><div class="v neu" id="dash-mileage">—</div></div>
-        <div class="stat"><div class="k">&nbsp;</div><div class="v">&nbsp;</div></div>
+        <div class="stat"><div class="k">Avg Cost / km</div><div class="v neu" id="dash-costperkm">—</div></div>
+        <div class="stat"><div class="k">Revenue / Hour</div><div class="v neu" id="dash-revhr">₹0/hr</div></div>
       </div>
     </div>
     <div class="card">
@@ -552,10 +574,11 @@ if('serviceWorker' in navigator){
 
 <div id="confirm-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; align-items:center; justify-content:center; padding:24px;">
   <div style="background:var(--surface); border:1px solid var(--divider); border-radius:16px; padding:22px; max-width:320px; width:100%;">
-    <div id="confirm-message" style="font-size:15px; margin-bottom:18px; line-height:1.5; white-space:pre-line;"></div>
+    <div id="confirm-message" style="font-size:15px; margin-bottom:14px; line-height:1.5; white-space:pre-line;"></div>
+    <input type="number" inputmode="decimal" id="confirm-amount-input" placeholder="Amount (₹)" style="display:none; margin-bottom:14px;">
     <div class="row">
       <button class="btn btn-ghost" style="margin-top:0;" onclick="closeConfirm(false)">Cancel</button>
-      <button class="btn btn-danger" style="margin-top:0;" onclick="closeConfirm(true)">Delete</button>
+      <button class="btn btn-danger" id="confirm-action-btn" style="margin-top:0;" onclick="closeConfirm(true)">Delete</button>
     </div>
   </div>
 </div>
@@ -578,10 +601,13 @@ async function save(key, value){
 // ---------- Custom confirm/alert (native browser confirm()/alert() can be silently
 // blocked in some embedded/sandboxed views, which is why deletes were failing) ----------
 let _confirmResolve = null;
+let _confirmMode = 'confirm';
 function showConfirm(message){
   return new Promise(resolve=>{
     _confirmResolve = resolve;
+    _confirmMode = 'confirm';
     document.getElementById('confirm-message').textContent = message;
+    document.getElementById('confirm-amount-input').style.display='none';
     const overlay = document.getElementById('confirm-overlay');
     overlay.querySelectorAll('button')[0].style.display='block';
     overlay.querySelectorAll('button')[1].textContent='Delete';
@@ -589,16 +615,43 @@ function showConfirm(message){
   });
 }
 function showAlert(message){
+  _confirmMode = 'alert';
   document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-amount-input').style.display='none';
   const overlay = document.getElementById('confirm-overlay');
   overlay.querySelectorAll('button')[0].style.display='none';
   overlay.querySelectorAll('button')[1].textContent='OK';
   _confirmResolve = null;
   overlay.style.display='flex';
 }
+// Lightweight "tap category, type amount, done" prompt — used by the Work-tab quick
+// expense strip. Resolves with a number, or null if cancelled/left blank.
+function showAmountPrompt(title){
+  return new Promise(resolve=>{
+    _confirmResolve = resolve;
+    _confirmMode = 'amount';
+    document.getElementById('confirm-message').textContent = title;
+    const input = document.getElementById('confirm-amount-input');
+    input.style.display = 'block';
+    input.value = '';
+    const overlay = document.getElementById('confirm-overlay');
+    overlay.querySelectorAll('button')[0].style.display='block';
+    overlay.querySelectorAll('button')[1].textContent='Save';
+    overlay.style.display='flex';
+    setTimeout(()=>input.focus(), 50);
+  });
+}
 function closeConfirm(result){
   document.getElementById('confirm-overlay').style.display='none';
-  if(_confirmResolve){ _confirmResolve(result); _confirmResolve=null; }
+  if(_confirmResolve){
+    if(_confirmMode==='amount'){
+      const val = Number(document.getElementById('confirm-amount-input').value);
+      _confirmResolve(result && val>0 ? val : null);
+    } else {
+      _confirmResolve(result);
+    }
+    _confirmResolve=null;
+  }
 }
 
 function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
@@ -1065,20 +1118,32 @@ async function deleteFuel(id){
   renderFuelHistory();
 }
 function renderFuelHistory(){
-  const withDerived = fuelWithDerived().reverse();
+  const withDerived = fuelWithDerived();
+  const validMileages = withDerived.filter(f=>f.mileage!=null).map(f=>f.mileage);
+  const avgMileage = validMileages.length ? validMileages.reduce((s,m)=>s+m,0)/validMileages.length : null;
   const el = document.getElementById('fuel-history');
   if(withDerived.length===0){ el.innerHTML = '<div class="empty">No fuel entries yet.</div>'; return; }
-  el.innerHTML = withDerived.map(f=>`
-    <div class="list-row">
+  el.innerHTML = [...withDerived].reverse().map(f=>{
+    let mileageHtml = '';
+    if(f.mileage!=null){
+      let color = 'var(--text-dim)';
+      if(avgMileage!=null){
+        if(f.mileage < avgMileage*0.85) color = 'var(--red)';       // notably worse than average
+        else if(f.mileage > avgMileage*1.1) color = 'var(--green)'; // notably better than average
+      }
+      mileageHtml = ` · <span style="color:${color}; font-weight:600;">${round2(f.mileage)} km/kg</span>`;
+    }
+    return `<div class="list-row">
       <div>
         <div class="main">${f.date} ${f.time}</div>
-        <div class="sub">${f.odo} km · ${round2(f.kgFilled)} kg @ ₹${f.price}${f.mileage!=null? ' · '+round2(f.mileage)+' km/kg' : ''}</div>
+        <div class="sub">${f.odo} km · ${round2(f.kgFilled)} kg @ ₹${f.price}${mileageHtml}</div>
       </div>
       <div style="display:flex; align-items:center;">
         <div class="amt">${money(f.amount)}</div>
         <button class="del" onclick="deleteFuel('${f.id}')">✕</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ================= EXPENSES & LOAN TAB =================
@@ -1182,6 +1247,18 @@ function totalDailyFixedCost(){
 document.getElementById('qe-category').addEventListener('change', e=>{
   document.getElementById('qe-category-other').style.display = e.target.value==='__other' ? 'block' : 'none';
 });
+// One-hand fast path from the Work tab: tap category icon, type amount, done.
+// "Other" logs simply as "Other" — use the full form in Expenses tab if you want
+// a custom category name instead.
+async function quickLogExpense(category){
+  const amount = await showAmountPrompt(`${category} — Amount (₹)`);
+  if(!amount) return;
+  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category, amount});
+  save('betafleet_quickexpenses', quickExpenses);
+  renderQuickExpenseHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+  vibrate(15);
+}
 function saveQuickExpense(){
   const categorySel = document.getElementById('qe-category').value;
   const category = categorySel==='__other' ? (document.getElementById('qe-category-other').value || 'Other') : categorySel;
@@ -1201,6 +1278,14 @@ async function deleteQuickExpense(id){
   renderQuickExpenseHistory();
   if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
 }
+function qeCategoryIcon(category){
+  const map = {Food:'🍔', Toll:'🛣️', Parking:'🅿️'};
+  return map[category] || '💳';
+}
+function qeCategoryColor(category){
+  const map = {Food:'#F2B94D', Toll:'#5AC8FA', Parking:'#9B8CFF'};
+  return map[category] || '#8891A6';
+}
 function renderQuickExpenseHistory(){
   const el = document.getElementById('quick-expense-history');
   if(!el) return;
@@ -1209,9 +1294,9 @@ function renderQuickExpenseHistory(){
   if(todays.length===0){ el.innerHTML = '<div class="empty">No quick expenses logged today.</div>'; return; }
   el.innerHTML = todays.map(q=>`
     <div class="list-row">
-      <div><div class="main">${q.category}</div><div class="sub">${q.time}</div></div>
+      <div><div class="main"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${qeCategoryColor(q.category)}; margin-right:6px;"></span>${qeCategoryIcon(q.category)} ${q.category}</div><div class="sub">${q.time}</div></div>
       <div style="display:flex; align-items:center;">
-        <div class="amt">${money(q.amount)}</div>
+        <div class="amt" style="color:var(--red);">-${money(q.amount)}</div>
         <button class="del" onclick="deleteQuickExpense('${q.id}')">✕</button>
       </div>
     </div>`).join('');
@@ -1846,6 +1931,13 @@ async function init(){
   initPersonalTripForm();
   initMaintenanceForm();
   initShareBackupButton();
+  const ptDetails = document.getElementById('personal-trip-details');
+  if(ptDetails){
+    ptDetails.addEventListener('toggle', ()=>{
+      const summary = ptDetails.querySelector('summary');
+      summary.textContent = (ptDetails.open ? '▾' : '▸') + ' Personal Use';
+    });
+  }
   renderWork();
   renderQuickExpenseHistory();
   renderMaintenanceHistory();
