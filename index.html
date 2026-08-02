@@ -305,7 +305,7 @@ if('serviceWorker' in navigator){
       <button class="qe-quick-btn qe-other" onclick="quickLogExpense('Other')"><span class="qe-icon">➕</span><span>Other</span></button>
     </div>
 
-    <div class="divider-label">Today's Sessions</div>
+    <div class="divider-label" onclick="openSessionsWeek()" style="cursor:pointer;">Today's Sessions ›</div>
     <div class="card" id="work-history"></div>
 
     <details id="personal-trip-details">
@@ -352,7 +352,7 @@ if('serviceWorker' in navigator){
       <div class="helptext" id="fuel-preview"></div>
       <button class="btn btn-primary" onclick="saveFuelEntry()">Save Fuel Entry</button>
     </div>
-    <div class="divider-label">History</div>
+    <div class="divider-label" onclick="openFuelWeek()" style="cursor:pointer;">History ›</div>
     <div class="card" id="fuel-history"></div>
   </section>
 
@@ -608,6 +608,40 @@ if('serviceWorker' in navigator){
     </div>
     <div class="divider-label">Day by Day</div>
     <div class="card" id="week-detail-days"></div>
+  </div>
+</div>
+
+<div id="session-week-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeSessionsWeek()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="sessionsWeekNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="session-week-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tap ‹ › to browse other weeks</div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="sessionsWeekNav(1)">›</button>
+    </div>
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat"><div class="k">Week Income</div><div class="v neu" id="session-week-income">₹0</div></div>
+      <div class="stat"><div class="k">Week km</div><div class="v" id="session-week-km">0</div></div>
+    </div>
+    <div class="card" id="session-week-entries"></div>
+  </div>
+</div>
+
+<div id="fuel-week-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeFuelWeek()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="fuelWeekNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="fuel-week-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tap ‹ › to browse other weeks</div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="fuelWeekNav(1)">›</button>
+    </div>
+    <div class="card" id="fuel-week-entries"></div>
   </div>
 </div>
 
@@ -1634,6 +1668,109 @@ function getWeekStart(dateStr){
   d.setDate(d.getDate() - d.getDay()); // roll back to that week's Sunday
   return d;
 }
+function weekKeyOf(date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+// ================= SESSIONS WEEK VIEW (tap "Today's Sessions ›" to open) =================
+let currentSessionsWeekKey = null;
+function openSessionsWeek(){
+  currentSessionsWeekKey = weekKeyOf(getWeekStart(todayStr()));
+  renderSessionsWeek();
+  document.getElementById('session-week-overlay').style.display = 'block';
+}
+function closeSessionsWeek(){
+  document.getElementById('session-week-overlay').style.display = 'none';
+}
+function sessionsWeekNav(delta){
+  const d = new Date(currentSessionsWeekKey);
+  d.setDate(d.getDate() + delta*7);
+  currentSessionsWeekKey = weekKeyOf(d);
+  renderSessionsWeek();
+}
+function renderSessionsWeek(){
+  const weekStart = new Date(currentSessionsWeekKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('session-week-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  const weekKeys = [];
+  for(let i=0;i<7;i++){ const d=new Date(weekStart); d.setDate(d.getDate()+i); weekKeys.push(weekKeyOf(d)); }
+  const weekSessions = sessions.filter(s=>weekKeys.includes(s.date)).sort((a,b)=> a.date===b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date));
+
+  const weekIncome = weekSessions.filter(s=>s.status==='Closed').reduce((s,x)=>s+x.cash+x.online,0);
+  const weekKm = weekSessions.filter(s=>s.status==='Closed').reduce((s,x)=>s+(x.endOdo-x.startOdo),0);
+  document.getElementById('session-week-income').textContent = money(round2(weekIncome));
+  document.getElementById('session-week-km').textContent = weekKm+' km';
+
+  const el = document.getElementById('session-week-entries');
+  if(weekSessions.length===0){ el.innerHTML = '<div class="empty">No sessions logged this week.</div>'; return; }
+  el.innerHTML = weekSessions.map(s=>{
+    const km = s.endOdo!=null ? s.endOdo-s.startOdo : null;
+    const total = s.status==='Closed' ? s.cash+s.online : null;
+    const dayLabel = new Date(s.date).toLocaleDateString('en-IN',{weekday:'short', day:'numeric', month:'short'});
+    return `<div class="list-row">
+      <div>
+        <div class="main">${dayLabel} · ${s.startTime}${s.endTime?' – '+s.endTime:''} ${s.status==='Open'?'<span class="badge open">Open</span>':''}</div>
+        <div class="sub">${km!=null? km+' km' : s.startOdo+' km start'}</div>
+      </div>
+      <div class="amt">${total!=null? money(total) : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ================= FUEL WEEK VIEW (tap "History ›" to open) =================
+let currentFuelWeekKey = null;
+function openFuelWeek(){
+  currentFuelWeekKey = weekKeyOf(getWeekStart(todayStr()));
+  renderFuelWeek();
+  document.getElementById('fuel-week-overlay').style.display = 'block';
+}
+function closeFuelWeek(){
+  document.getElementById('fuel-week-overlay').style.display = 'none';
+}
+function fuelWeekNav(delta){
+  const d = new Date(currentFuelWeekKey);
+  d.setDate(d.getDate() + delta*7);
+  currentFuelWeekKey = weekKeyOf(d);
+  renderFuelWeek();
+}
+function renderFuelWeek(){
+  const weekStart = new Date(currentFuelWeekKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('fuel-week-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  const weekKeys = [];
+  for(let i=0;i<7;i++){ const d=new Date(weekStart); d.setDate(d.getDate()+i); weekKeys.push(weekKeyOf(d)); }
+  const allDerived = fuelWithDerived();
+  const validMileages = allDerived.filter(f=>f.mileage!=null).map(f=>f.mileage);
+  const avgMileage = validMileages.length ? validMileages.reduce((s,m)=>s+m,0)/validMileages.length : null;
+  const weekEntries = allDerived.filter(f=>weekKeys.includes(f.date));
+
+  const el = document.getElementById('fuel-week-entries');
+  if(weekEntries.length===0){ el.innerHTML = '<div class="empty">No fuel entries logged this week.</div>'; return; }
+  el.innerHTML = weekEntries.map(f=>{
+    let mileageHtml = '';
+    if(f.mileage!=null){
+      let color = 'var(--text-dim)';
+      if(avgMileage!=null){
+        if(f.mileage < avgMileage*0.85) color = 'var(--red)';
+        else if(f.mileage > avgMileage*1.1) color = 'var(--green)';
+      }
+      mileageHtml = ` · <span style="color:${color}; font-weight:600;">${round2(f.mileage)} km/kg</span>`;
+    }
+    const dayLabel = new Date(f.date).toLocaleDateString('en-IN',{weekday:'short', day:'numeric', month:'short'});
+    return `<div class="list-row">
+      <div>
+        <div class="main">${dayLabel} ${f.time}</div>
+        <div class="sub">${f.odo} km · ${round2(f.kgFilled)} kg @ ₹${f.price}${mileageHtml}</div>
+      </div>
+      <div class="amt">${money(f.amount)}</div>
+    </div>`;
+  }).join('');
+}
+
 function computeWeeklyStats(){
   const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
   const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
