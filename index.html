@@ -583,6 +583,34 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
+<div id="week-detail-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeWeekDetail()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="weekDetailNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="week-detail-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);" id="week-detail-subtitle"></div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="weekDetailNav(1)">›</button>
+    </div>
+    <div class="hero-profit" id="week-detail-hero">
+      <div class="k">Week Profit</div>
+      <div class="v" id="week-detail-profit">₹0</div>
+    </div>
+    <div class="card">
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Income</div><div class="v neu" id="week-detail-income">₹0</div></div>
+        <div class="stat"><div class="k">Breakeven</div><div class="v" id="week-detail-breakeven">₹0</div></div>
+        <div class="stat"><div class="k">Online Hours</div><div class="v" id="week-detail-hours">0h</div></div>
+        <div class="stat"><div class="k">km Driven</div><div class="v" id="week-detail-km">0</div></div>
+      </div>
+    </div>
+    <div class="divider-label">Day by Day</div>
+    <div class="card" id="week-detail-days"></div>
+  </div>
+</div>
+
 <script>
 // ---------- Storage (localStorage — works standalone, on-device, no login/internet needed) ----------
 async function loadArr(key){
@@ -1651,12 +1679,86 @@ function renderWeeklyStatement(){
     const weekEnd = new Date(w.weekStart); weekEnd.setDate(weekEnd.getDate()+6);
     const label = `${w.weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
     const cls = w.profit>=0 ? 'pos' : 'neg';
-    return `<div class="list-row">
+    return `<div class="list-row" onclick="openWeekDetail('${key}')" style="cursor:pointer;">
       <div>
-        <div class="main">${label}</div>
+        <div class="main">${label} ›</div>
         <div class="sub">${round2(w.hours)}h online · ${round2(w.km)} km</div>
       </div>
       <div class="amt cal-list-amt ${cls}">${w.profit>=0?'+':''}${money(round2(w.profit))}</div>
+    </div>`;
+  }).join('');
+}
+
+// ================= WEEK DETAIL (day-by-day breakdown, tap a week to open) =================
+let currentWeekDetailKey = null;
+
+function computeDayStats(dateStr){
+  const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
+  const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
+  const fixedDaily = totalDailyFixedCost();
+  const loanDaily = dailyLoanCost();
+  const daySessions = sessions.filter(s=>s.status==='Closed' && s.date===dateStr);
+  const income = daySessions.reduce((s,x)=>s+x.cash+x.online,0);
+  const km = daySessions.reduce((s,x)=>s+(x.endOdo-x.startOdo),0);
+  const hours = daySessions.reduce((s,x)=>{
+    const gross = ((new Date(x.date+'T'+x.endTime))-(new Date(x.date+'T'+x.startTime)))/3600000;
+    return s + Math.max(0, gross - getSessionBreakMinutes(x)/60);
+  },0);
+  const quickExp = quickExpenses.filter(q=>q.date===dateStr).reduce((s,q)=>s+q.amount,0);
+  const maintExp = maintenanceRecords.filter(m=>m.serviceDate===dateStr).reduce((s,m)=>s+m.cost,0);
+  const fuelCost = avgCostPerKm * km;
+  const breakeven = fixedDaily + loanDaily + fuelCost + quickExp + maintExp;
+  const profit = income - breakeven;
+  return {income, km, hours, quickExp, maintExp, breakeven, profit, hasSessions: daySessions.length>0};
+}
+
+function openWeekDetail(key){
+  currentWeekDetailKey = key;
+  renderWeekDetail();
+  document.getElementById('week-detail-overlay').style.display = 'block';
+}
+function closeWeekDetail(){
+  document.getElementById('week-detail-overlay').style.display = 'none';
+}
+function weekDetailNav(delta){
+  const d = new Date(currentWeekDetailKey);
+  d.setDate(d.getDate() + delta*7);
+  currentWeekDetailKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  renderWeekDetail();
+}
+function renderWeekDetail(){
+  const weekStart = new Date(currentWeekDetailKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('week-detail-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+  document.getElementById('week-detail-subtitle').textContent = 'Tap ‹ › to browse other weeks';
+
+  let weekIncome=0, weekKm=0, weekHours=0, weekBreakeven=0, weekProfit=0;
+  const dayRows = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(weekStart); d.setDate(d.getDate()+i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const stat = computeDayStats(dateStr);
+    weekIncome += stat.income; weekKm += stat.km; weekHours += stat.hours;
+    weekBreakeven += stat.breakeven; weekProfit += stat.profit;
+    dayRows.push({dateStr, dayName: d.toLocaleDateString('en-IN',{weekday:'short'}), dateLabel: d.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), ...stat});
+  }
+
+  document.getElementById('week-detail-income').textContent = money(round2(weekIncome));
+  document.getElementById('week-detail-breakeven').textContent = money(round2(weekBreakeven));
+  document.getElementById('week-detail-hours').textContent = round2(weekHours)+'h';
+  document.getElementById('week-detail-km').textContent = weekKm+' km';
+  document.getElementById('week-detail-profit').textContent = money(round2(weekProfit));
+  document.getElementById('week-detail-hero').className = 'hero-profit ' + (weekProfit>=0?'pos':'neg');
+
+  document.getElementById('week-detail-days').innerHTML = dayRows.map(r=>{
+    if(!r.hasSessions){
+      return `<div class="list-row"><div><div class="main">${r.dayName} ${r.dateLabel}</div><div class="sub">No sessions</div></div><div class="amt" style="color:var(--text-dim);">—</div></div>`;
+    }
+    const cls = r.profit>=0?'pos':'neg';
+    return `<div class="list-row">
+      <div><div class="main">${r.dayName} ${r.dateLabel}</div><div class="sub">${round2(r.hours)}h · ${round2(r.km)} km · income ${money(round2(r.income))}</div></div>
+      <div class="amt cal-list-amt ${cls}">${r.profit>=0?'+':''}${money(round2(r.profit))}</div>
     </div>`;
   }).join('');
 }
