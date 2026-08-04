@@ -222,20 +222,6 @@ if('serviceWorker' in navigator){
   }
   .export-banner .title{ font-family:var(--display); font-weight:600; color:var(--led); font-size:13px; margin-bottom:4px; }
 
-  /* ---------- Quick Log icon row (Work tab, one-hand fast entry) ---------- */
-  .qe-quick-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px; }
-  .qe-quick-btn{
-    display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 4px;
-    border-radius:12px; border:1px solid var(--divider); background:var(--surface);
-    font-family:var(--sans); font-size:10.5px; font-weight:600; color:var(--text);
-    transition:transform .1s ease;
-  }
-  .qe-quick-btn:active{ transform:scale(0.93); }
-  .qe-quick-btn .qe-icon{ font-size:20px; }
-  .qe-food{ border-color:rgba(255,176,32,0.4); background:rgba(255,176,32,0.08); }
-  .qe-toll{ border-color:rgba(79,168,255,0.4); background:rgba(79,168,255,0.08); }
-  .qe-parking{ border-color:rgba(52,209,180,0.4); background:rgba(52,209,180,0.08); }
-  .qe-other{ border-color:var(--divider); background:var(--surface-2); }
   summary::-webkit-details-marker{ display:none; }
   summary{ outline:none; }
 
@@ -296,13 +282,6 @@ if('serviceWorker' in navigator){
     <div class="stat-grid" style="margin-bottom:14px;">
       <div class="stat"><div class="k">Today's km</div><div class="v neu" id="today-km">0</div></div>
       <div class="stat"><div class="k">Today's Income</div><div class="v neu" id="today-income">₹0</div></div>
-    </div>
-
-    <div class="qe-quick-row">
-      <button class="qe-quick-btn qe-food" onclick="quickLogExpense('Food')"><span class="qe-icon">🍔</span><span>Food</span></button>
-      <button class="qe-quick-btn qe-toll" onclick="quickLogExpense('Toll')"><span class="qe-icon">🛣️</span><span>Toll</span></button>
-      <button class="qe-quick-btn qe-parking" onclick="quickLogExpense('Parking')"><span class="qe-icon">🅿️</span><span>Parking</span></button>
-      <button class="qe-quick-btn qe-other" onclick="quickLogExpense('Other')"><span class="qe-icon">➕</span><span>Other</span></button>
     </div>
 
     <div class="divider-label" onclick="openSessionsWeek()" style="cursor:pointer;">Today's Sessions ›</div>
@@ -1312,15 +1291,6 @@ document.getElementById('qe-category').addEventListener('change', e=>{
 // One-hand fast path from the Work tab: tap category icon, type amount, done.
 // "Other" logs simply as "Other" — use the full form in Expenses tab if you want
 // a custom category name instead.
-async function quickLogExpense(category){
-  const amount = await showAmountPrompt(`${category} — Amount (₹)`);
-  if(!amount) return;
-  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category, amount});
-  save('betafleet_quickexpenses', quickExpenses);
-  renderQuickExpenseHistory();
-  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
-  vibrate(15);
-}
 function saveQuickExpense(){
   const categorySel = document.getElementById('qe-category').value;
   const category = categorySel==='__other' ? (document.getElementById('qe-category-other').value || 'Other') : categorySel;
