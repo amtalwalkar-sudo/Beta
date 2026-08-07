@@ -6,15 +6,19 @@
   <title>Driver Shift & Expense Tracker</title>
   <style>
     :root {
-      --primary-color: #2563eb;
-      --primary-dark: #1d4ed8;
-      --bg-card: #ffffff;
-      --bg-main: #f3f4f6;
-      --border-color: #e5e7eb;
-      --text-main: #1f2937;
-      --text-muted: #6b7280;
-      --success-color: #059669;
-      --danger-color: #dc2626;
+      --bg-main: #0b0f19;
+      --bg-card: #151c2c;
+      --bg-card-accent: #1e293b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.25);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.25);
+      --danger: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --radius-lg: 16px;
+      --radius-md: 12px;
     }
 
     * {
@@ -37,36 +41,45 @@
     main {
       flex: 1;
       padding: 16px;
-      padding-bottom: calc(85px + env(safe-area-inset-bottom));
-      overflow-y: auto;
-      max-width: 600px;
+      padding-bottom: calc(90px + env(safe-area-inset-bottom));
+      max-width: 500px;
       margin: 0 auto;
       width: 100%;
     }
 
-    /* Views / Tab Content */
+    /* Tab Panels */
     .tab-content {
       display: none;
+      animation: fadeIn 0.2s ease-out;
     }
 
     .tab-content.active {
       display: block;
     }
 
-    /* Cards & Layout */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Component */
     .card {
       background: var(--bg-card);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 14px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
       border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     }
 
     .card-title {
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 700;
-      margin-bottom: 8px;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .grid-2 {
@@ -75,58 +88,112 @@
       gap: 12px;
     }
 
-    /* Interactive Slide Bar Component */
+    /* Stat Display */
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-top: 2px;
+    }
+
+    .stat-val.primary { color: var(--primary); }
+    .stat-val.success { color: var(--success); }
+
+    /* Ultra-Responsive Pointer-Based Slide Bar */
     .slider-container {
       position: relative;
       width: 100%;
-      height: 54px;
-      background: #e2e8f0;
-      border-radius: 27px;
+      height: 56px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 28px;
       padding: 4px;
       display: flex;
       align-items: center;
       user-select: none;
-      touch-action: none;
+      touch-action: none; /* Crucial for touch dragging */
       overflow: hidden;
-      margin-top: 12px;
+      margin-top: 14px;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+      transition: background 0.3s ease;
     }
 
     .slider-container.active-shift {
-      background: #dcfce7;
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--success);
     }
 
     .slider-track-text {
       position: absolute;
       width: 100%;
       text-align: center;
-      font-size: 0.88rem;
-      font-weight: 700;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 1px;
       color: var(--text-muted);
       pointer-events: none;
       z-index: 1;
+      text-transform: uppercase;
     }
 
     .slider-handle {
-      position: absolute;
-      left: 4px;
-      top: 4px;
-      width: 46px;
-      height: 46px;
-      background: var(--primary-color);
+      position: relative;
+      width: 48px;
+      height: 48px;
+      background: var(--primary);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #ffffff;
+      color: #0b0f19;
       font-size: 1.2rem;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      font-weight: 900;
+      box-shadow: 0 0 15px var(--primary-glow);
       z-index: 2;
       cursor: grab;
-      transition: transform 0.1s ease-out;
+      will-change: transform;
     }
 
     .slider-handle.active-handle {
-      background: var(--danger-color);
+      background: var(--danger);
+      color: #ffffff;
+      box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: rgba(11, 15, 25, 0.6);
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--primary);
     }
 
     /* Buttons */
@@ -134,60 +201,38 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 12px 16px;
+      padding: 13px 16px;
       font-size: 0.95rem;
-      font-weight: 600;
-      border-radius: 10px;
+      font-weight: 700;
+      border-radius: var(--radius-md);
       border: none;
       cursor: pointer;
-      transition: background-color 0.15s, opacity 0.15s;
       width: 100%;
       user-select: none;
+      transition: transform 0.1s ease, opacity 0.1s ease;
     }
 
     .btn:active {
-      opacity: 0.8;
-      transform: scale(0.99);
+      transform: scale(0.98);
+      opacity: 0.9;
     }
 
     .btn-primary {
-      background-color: var(--primary-color);
-      color: #ffffff;
+      background: var(--primary);
+      color: #0b0f19;
     }
 
     .btn-secondary {
-      background-color: #e5e7eb;
+      background: var(--bg-card-accent);
       color: var(--text-main);
+      border: 1px solid var(--border-color);
     }
 
     .btn-ghost {
-      background-color: transparent;
+      background: transparent;
       color: var(--text-muted);
       width: auto;
-      padding: 8px;
-    }
-
-    /* Form Elements */
-    .form-group {
-      margin-bottom: 12px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-
-    .form-group input, .form-group select {
-      width: 100%;
-      padding: 11px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      font-size: 0.95rem;
-      background: #ffffff;
-      color: var(--text-main);
+      padding: 6px 10px;
     }
 
     /* Bottom Navigation Bar */
@@ -196,13 +241,16 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 65px;
-      background: #ffffff;
+      height: 70px;
+      background: rgba(21, 28, 44, 0.92);
+      backdrop-filter: blur(12px);
       border-top: 1px solid var(--border-color);
       display: flex;
       justify-content: space-around;
       align-items: center;
-      z-index: 200;
+      z-index: 100;
+      max-width: 500px;
+      margin: 0 auto;
       padding-bottom: env(safe-area-inset-bottom);
     }
 
@@ -213,53 +261,56 @@
       justify-content: center;
       flex: 1;
       height: 100%;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
+      font-weight: 700;
       color: var(--text-muted);
       cursor: pointer;
       user-select: none;
     }
 
     .tab-item.active {
-      color: var(--primary-color);
-      font-weight: bold;
+      color: var(--primary);
     }
 
-    .tab-item span.icon {
-      font-size: 1.2rem;
+    .tab-item .icon {
+      font-size: 1.25rem;
       margin-bottom: 2px;
     }
 
-    /* Bottom Sheet Overlays - Explicit display management to prevent input blocking */
+    /* Absolute Overlay Fix: Fully hidden when inactive so it NEVER blocks touch inputs */
     .tab-modal-overlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      background-color: rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(3px);
+      background-color: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
       z-index: 500;
-      display: none; /* Changed from display:flex to avoid blocking taps when hidden */
+      display: none !important;
+      pointer-events: none !important;
       flex-direction: column;
       justify-content: flex-end;
-      pointer-events: none;
     }
 
     .tab-modal-overlay.active {
-      display: flex;
-      pointer-events: auto;
+      display: flex !important;
+      pointer-events: auto !important;
     }
 
     .tab-modal-card {
       background: var(--bg-card);
+      border-top: 1px solid var(--border-color);
       width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
       max-height: 85vh;
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
     }
 
     .tab-modal-header {
@@ -273,22 +324,17 @@
     .tab-modal-body {
       padding: 20px;
       overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
       flex: 1;
     }
 
-    .stat-val {
-      font-size: 1.4rem;
-      font-weight: 800;
-      color: var(--text-main);
+    .badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
     }
-
-    .stat-label {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+    .badge-off { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+    .badge-on { background: rgba(16, 185, 129, 0.15); color: var(--success); }
   </style>
 </head>
 <body>
@@ -297,34 +343,37 @@
     <!-- TAB 1: DASHBOARD -->
     <div id="tab-dashboard" class="tab-content active">
       <div class="card">
-        <div class="stat-label">Shift Control</div>
-        <div class="stat-val" id="shift-state-text" style="margin-bottom: 8px;">Off Shift</div>
+        <div class="card-title">
+          <span>Shift Control</span>
+          <span class="badge badge-off" id="shift-badge">OFF SHIFT</span>
+        </div>
+        <div class="stat-val" id="shift-state-text">Ready to Drive</div>
         
-        <!-- Slide Bar Component -->
+        <!-- Touch-Native Slide Bar -->
         <div class="slider-container" id="shift-slider-container">
-          <div class="slider-track-text" id="slider-track-text">SLIDE TO START SHIFT ➔</div>
+          <div class="slider-track-text" id="slider-track-text">Slide to Start Shift ➔</div>
           <div class="slider-handle" id="slider-handle">➔</div>
         </div>
 
-        <p id="dashboard-status" style="margin-top: 14px; color: var(--text-muted); font-size: 0.88rem; line-height: 1.4;">
-          Slide the bar above to track active work hours & targets.
+        <p id="dashboard-status" style="margin-top: 14px; color: var(--text-muted); font-size: 0.85rem; line-height: 1.4;">
+          Slide the handle to begin your working shift.
         </p>
       </div>
 
       <div class="grid-2" style="margin-bottom: 14px;">
         <div class="card" style="margin-bottom:0;">
           <div class="stat-label">Target Breakeven</div>
-          <div class="stat-val" id="dash-breakeven-val">₹0.00</div>
+          <div class="stat-val success" id="dash-breakeven-val">₹0.00</div>
         </div>
         <div class="card" style="margin-bottom:0;">
           <div class="stat-label">Daily Fuel Est.</div>
-          <div class="stat-val" id="dash-fuel-val">₹0.00</div>
+          <div class="stat-val primary" id="dash-fuel-val">₹0.00</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">Quick Statements</div>
-        <div class="grid-2" style="margin-top: 10px;">
+        <div class="grid-2">
           <button class="btn btn-secondary" id="btn-open-work-statement">Work Sessions</button>
           <button class="btn btn-secondary" id="btn-open-fuel-statement">Fuel Expenses</button>
         </div>
@@ -349,10 +398,10 @@
       <div class="card" id="btn-open-personal-trips" style="cursor: pointer;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h4 style="margin: 0; font-size: 0.95rem;">Personal Trips Log</h4>
-            <p style="margin: 4px 0 0; font-size: 0.85rem; color: var(--text-muted);">Track non-work trips & fuel share</p>
+            <h4 style="margin: 0; font-size: 0.95rem; font-weight:700;">Personal Trips Log</h4>
+            <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-muted);">Track non-work trips & fuel share</p>
           </div>
-          <span style="font-size: 1.2rem;">➔</span>
+          <span style="font-size: 1.2rem; color: var(--primary);">➔</span>
         </div>
       </div>
     </div>
@@ -458,8 +507,8 @@
         <button class="btn btn-ghost modal-close-btn">✕</button>
       </div>
       <div class="tab-modal-body">
-        <div class="card" style="background: #f9fafb; margin-bottom: 16px;">
-          <div class="card-title" style="font-size: 0.9rem;">Add Personal Trip</div>
+        <div class="card" style="background: rgba(11, 15, 25, 0.4); margin-bottom: 16px;">
+          <div class="card-title" style="font-size: 0.85rem;">Add Personal Trip</div>
           <div class="form-group">
             <label>Distance (KM)</label>
             <input type="number" id="trip-km" placeholder="e.g. 12" />
@@ -475,9 +524,8 @@
     </div>
   </div>
 
-  <!-- CONTROLLER & APPLICATION LOGIC -->
+  <!-- CONTROLLER LOGIC -->
   <script>
-    // --- STATE MANAGEMENT ---
     let isShiftActive = false;
     let sessions = [];
     let fuelEntries = [];
@@ -503,7 +551,7 @@
       localStorage.setItem('app_personal_trips', JSON.stringify(personalTrips));
     }
 
-    // --- TAB SWITCHER ---
+    // Tab Switcher
     function switchTab(tabName) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
@@ -515,80 +563,84 @@
       if (targetNav) targetNav.classList.add('active');
     }
 
-    // --- SLIDE BAR CONTROLLER ---
+    // Pointer Events Slider (Handles touch, mouse, stylus universally)
     function initSlideBar() {
       const handle = document.getElementById('slider-handle');
       const container = document.getElementById('shift-slider-container');
       const trackText = document.getElementById('slider-track-text');
       const stateText = document.getElementById('shift-state-text');
+      const badge = document.getElementById('shift-badge');
       if (!handle || !container) return;
 
       let isDragging = false;
       let startX = 0;
-      let currentX = 0;
 
       function updateSliderUI() {
         if (isShiftActive) {
           container.classList.add('active-shift');
           handle.classList.add('active-handle');
-          trackText.textContent = "SLIDE TO END SHIFT ➔";
-          stateText.textContent = "On Shift (Driving)";
-          stateText.style.color = "var(--success-color)";
+          trackText.textContent = "Slide to End Shift ➔";
+          stateText.textContent = "On Shift (Active)";
+          stateText.style.color = "var(--success)";
+          badge.textContent = "ON SHIFT";
+          badge.className = "badge badge-on";
         } else {
           container.classList.remove('active-shift');
           handle.classList.remove('active-handle');
-          trackText.textContent = "SLIDE TO START SHIFT ➔";
-          stateText.textContent = "Off Shift";
+          trackText.textContent = "Slide to Start Shift ➔";
+          stateText.textContent = "Ready to Drive";
           stateText.style.color = "var(--text-main)";
+          badge.textContent = "OFF SHIFT";
+          badge.className = "badge badge-off";
         }
       }
 
-      function onStart(e) {
+      handle.addEventListener('pointerdown', (e) => {
         isDragging = true;
-        const pageX = e.touches ? e.touches[0].pageX : e.pageX;
-        startX = pageX - handle.offsetLeft;
+        startX = e.clientX - handle.offsetLeft;
+        handle.setPointerCapture(e.pointerId);
         handle.style.transition = 'none';
-      }
+      });
 
-      function onMove(e) {
+      handle.addEventListener('pointermove', (e) => {
         if (!isDragging) return;
-        const pageX = e.touches ? e.touches[0].pageX : e.pageX;
         const maxSlide = container.clientWidth - handle.clientWidth - 8;
-        currentX = pageX - startX;
+        let currentX = e.clientX - startX;
 
         if (currentX < 0) currentX = 0;
         if (currentX > maxSlide) currentX = maxSlide;
 
         handle.style.transform = `translateX(${currentX}px)`;
-      }
+      });
 
-      function onEnd() {
+      const endDrag = (e) => {
         if (!isDragging) return;
         isDragging = false;
         const maxSlide = container.clientWidth - handle.clientWidth - 8;
-        handle.style.transition = 'transform 0.2s ease-out';
+        
+        // Extract x translation from transform matrix
+        const transformStr = handle.style.transform;
+        const match = transformStr.match(/translateX\(([^px]+)px\)/);
+        const currentX = match ? parseFloat(match[1]) : 0;
 
-        if (currentX > maxSlide * 0.7) {
+        handle.style.transition = 'transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
+
+        if (currentX > maxSlide * 0.65) {
           isShiftActive = !isShiftActive;
           saveState();
         }
 
         handle.style.transform = `translateX(0px)`;
         updateSliderUI();
-      }
+      };
 
-      handle.addEventListener('touchstart', onStart, { passive: true });
-      window.addEventListener('touchmove', onMove, { passive: true });
-      window.addEventListener('touchend', onEnd);
-
-      handle.addEventListener('mousedown', onStart);
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onEnd);
+      handle.addEventListener('pointerup', endDrag);
+      handle.addEventListener('pointercancel', endDrag);
 
       updateSliderUI();
     }
 
-    // --- MODAL OVERLAYS ---
+    // Modal Sheet Controllers
     function openModal(overlayId, renderCallback) {
       if (typeof renderCallback === 'function') renderCallback();
       const el = document.getElementById(overlayId);
@@ -600,49 +652,6 @@
       if (el) el.classList.remove('active');
     }
 
-    // --- RENDERERS ---
+    // Render Data Functions
     function renderDashboard() {
       const targetKm = 120;
-      let totalMaintDaily = maintenanceList.reduce((acc, m) => {
-        const cost = parseNum(m.cost);
-        if (m.type === 'km' && m.intervalKm > 0) return acc + ((cost / m.intervalKm) * targetKm);
-        if (m.type === 'duration' && m.intervalDays > 0) return acc + (cost / m.intervalDays);
-        return acc;
-      }, 0);
-
-      const fuelDaily = targetKm * fuelCostPerKm;
-      const totalBreakeven = fuelDaily + totalMaintDaily;
-
-      document.getElementById('dash-breakeven-val').textContent = `₹${totalBreakeven.toFixed(2)}`;
-      document.getElementById('dash-fuel-val').textContent = `₹${fuelDaily.toFixed(2)}`;
-    }
-
-    function renderSessions() {
-      const container = document.getElementById('session-week-content');
-      if (sessions.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">No work sessions recorded.</p>';
-        return;
-      }
-      container.innerHTML = sessions.map(s => `
-        <div class="card">
-          <div style="display:flex; justify-content:space-between;">
-            <strong>${s.date}</strong>
-            <span style="color:var(--success-color); font-weight:700;">₹${parseNum(s.earnings).toFixed(2)}</span>
-          </div>
-          <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">
-            Distance: ${parseNum(s.km)} KM
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderFuel() {
-      const container = document.getElementById('fuel-week-content');
-      if (fuelEntries.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">No fuel logs recorded.</p>';
-        return;
-      }
-      container.innerHTML = fuelEntries.map(f => `
-        <div class="card">
-          <div style="display:flex; justify-content:space-between;">
-            <strong>${f.date} ${f
