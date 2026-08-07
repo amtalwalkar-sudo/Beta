@@ -7,11 +7,13 @@
   <style>
     :root {
       --primary-color: #2563eb;
+      --primary-dark: #1d4ed8;
       --bg-card: #ffffff;
       --bg-main: #f3f4f6;
       --border-color: #e5e7eb;
       --text-main: #1f2937;
       --text-muted: #6b7280;
+      --success-color: #059669;
     }
 
     * {
@@ -32,26 +34,58 @@
     main {
       flex: 1;
       padding: 16px;
-      padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Prevents tabbar overlap */
+      padding-bottom: calc(85px + env(safe-area-inset-bottom));
       overflow-y: auto;
     }
 
-    /* Buttons & Controls */
+    /* Views / Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards & Layout */
+    .card {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border-color);
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 10px 16px;
+      padding: 12px 16px;
       font-size: 0.95rem;
       font-weight: 600;
       border-radius: 10px;
       border: none;
       cursor: pointer;
-      transition: opacity 0.2s;
+      transition: background-color 0.2s, opacity 0.2s;
+      width: 100%;
     }
 
     .btn:active {
-      opacity: 0.8;
+      opacity: 0.85;
     }
 
     .btn-primary {
@@ -59,18 +93,38 @@
       color: #ffffff;
     }
 
+    .btn-secondary {
+      background-color: #e5e7eb;
+      color: var(--text-main);
+    }
+
     .btn-ghost {
       background-color: transparent;
       color: var(--text-muted);
+      width: auto;
+      padding: 8px;
     }
 
-    .card {
-      background: var(--bg-card);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 11px;
+      border-radius: 8px;
       border: 1px solid var(--border-color);
+      font-size: 0.95rem;
+      background: #ffffff;
     }
 
     /* Bottom Navigation Bar */
@@ -85,7 +139,7 @@
       display: flex;
       justify-content: space-around;
       align-items: center;
-      z-index: 20;
+      z-index: 200;
       padding-bottom: env(safe-area-inset-bottom);
     }
 
@@ -93,9 +147,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
+      flex: 1;
+      height: 100%;
       font-size: 0.75rem;
       color: var(--text-muted);
       cursor: pointer;
+      user-select: none;
     }
 
     .tab-item.active {
@@ -103,7 +161,12 @@
       font-weight: bold;
     }
 
-    /* Standardized Bottom Sheet Overlays */
+    .tab-item span.icon {
+      font-size: 1.2rem;
+      margin-bottom: 2px;
+    }
+
+    /* Unified Bottom Sheet Overlays */
     .tab-modal-overlay {
       position: fixed;
       top: 0;
@@ -159,76 +222,157 @@
       flex: 1;
     }
 
-    /* Confirmation Overlay High Layer Fix */
     #confirm-overlay {
       z-index: 1000;
     }
 
-    .form-group {
-      margin-bottom: 12px;
+    .stat-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--text-main);
     }
 
-    .form-group label {
-      display: block;
-      font-size: 0.85rem;
+    .stat-label {
+      font-size: 0.8rem;
       color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-
-    .form-group input, .form-group select {
-      width: 100%;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
   </style>
 </head>
 <body>
 
   <main>
-    <!-- Dashboard Overview Header -->
-    <div class="card">
-      <h2>Shift Dashboard</h2>
-      <p id="dashboard-status" style="margin-top: 8px; color: var(--text-muted); font-size: 0.9rem;">
-        Calculating daily metrics...
-      </p>
-    </div>
+    <!-- TAB 1: DASHBOARD -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="card">
+        <div class="stat-label">Shift Status</div>
+        <div class="stat-val" id="shift-state-text">Ready to Drive</div>
+        <p id="dashboard-status" style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem; line-height: 1.4;">
+          Calculating daily breakeven targets...
+        </p>
+      </div>
 
-    <!-- Dashboard Quick Actions -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-      <button class="btn btn-primary" onclick="openSessionsWeek()">Work Sessions</button>
-      <button class="btn btn-primary" onclick="openFuelWeek()">Fuel Expenses</button>
-    </div>
-
-    <div class="card" onclick="openPersonalTripsLog()" style="cursor: pointer;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <h4 style="margin: 0;">Personal Trips Log</h4>
-          <p style="margin: 4px 0 0; font-size: 0.85rem; color: var(--text-muted);">Track non-work distances</p>
+      <div class="grid-2" style="margin-bottom: 14px;">
+        <div class="card" style="margin-bottom:0;">
+          <div class="stat-label">Target Breakeven</div>
+          <div class="stat-val" id="dash-breakeven-val">₹0.00</div>
         </div>
-        <span style="font-size: 1.2rem;">➔</span>
+        <div class="card" style="margin-bottom:0;">
+          <div class="stat-label">Daily Fuel Est.</div>
+          <div class="stat-val" id="dash-fuel-val">₹0.00</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Quick Statements</div>
+        <div class="grid-2" style="margin-top: 10px;">
+          <button class="btn btn-secondary" onclick="openSessionsWeek()">Work Sessions</button>
+          <button class="btn btn-secondary" onclick="openFuelWeek()">Fuel Expenses</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: WORK SESSIONS -->
+    <div id="tab-work" class="tab-content">
+      <div class="card">
+        <div class="card-title">Log Work Session</div>
+        <div class="form-group">
+          <label>Earnings (₹)</label>
+          <input type="number" id="work-earnings" placeholder="e.g. 2500" />
+        </div>
+        <div class="form-group">
+          <label>Distance Driven (KM)</label>
+          <input type="number" id="work-km" placeholder="e.g. 140" />
+        </div>
+        <button class="btn btn-primary" onclick="saveWorkSession()">Save Session</button>
+      </div>
+
+      <div class="card" onclick="openPersonalTripsLog()" style="cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h4 style="margin: 0; font-size: 0.95rem;">Personal Trips Log</h4>
+            <p style="margin: 4px 0 0; font-size: 0.85rem; color: var(--text-muted);">Track non-work trips & fuel share</p>
+          </div>
+          <span style="font-size: 1.2rem;">➔</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: FUEL EXPENSES -->
+    <div id="tab-fuel" class="tab-content">
+      <div class="card">
+        <div class="card-title">Log Fuel Refill</div>
+        <div class="form-group">
+          <label>Fuel Cost (₹)</label>
+          <input type="number" id="fuel-cost" placeholder="e.g. 1000" />
+        </div>
+        <div class="form-group">
+          <label>Odometer / Distance Since Last (KM)</label>
+          <input type="number" id="fuel-distance" placeholder="e.g. 280" />
+        </div>
+        <button class="btn btn-primary" onclick="saveFuelEntry()">Log Fuel</button>
+      </div>
+
+      <button class="btn btn-secondary" onclick="openFuelWeek()">View Fuel Statement Sheet</button>
+    </div>
+
+    <!-- TAB 4: MAINTENANCE & SETTINGS -->
+    <div id="tab-settings" class="tab-content">
+      <div class="card">
+        <div class="card-title">Add Maintenance Category</div>
+        <div class="form-group">
+          <label>Item Name</label>
+          <input type="text" id="maint-name" placeholder="e.g. Engine Oil, Tyres" />
+        </div>
+        <div class="form-group">
+          <label>Total Cost (₹)</label>
+          <input type="number" id="maint-cost" placeholder="e.g. 3000" />
+        </div>
+        <div class="form-group">
+          <label>Amortization Type</label>
+          <select id="maint-type">
+            <option value="km">Kilometer-based (Interval KM)</option>
+            <option value="duration">Duration-based (Days)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Interval (KM or Days)</label>
+          <input type="number" id="maint-interval" placeholder="e.g. 10000 KM or 365 Days" />
+        </div>
+        <button class="btn btn-primary" onclick="saveMaintenanceItem()">Add Rule</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Active Maintenance Rules</div>
+        <div id="maint-list-container">
+          <!-- Rendered via JS -->
+        </div>
       </div>
     </div>
   </main>
 
-  <!-- Bottom Navigation -->
+  <!-- Bottom Navigation Bar -->
   <nav id="tabbar">
-    <div class="tab-item active" onclick="switchTab('dashboard')">
+    <div id="nav-dashboard" class="tab-item active" onclick="switchTab('dashboard')">
+      <span class="icon">📊</span>
       <span>Dashboard</span>
     </div>
-    <div class="tab-item" onclick="openSessionsWeek()">
+    <div id="nav-work" class="tab-item" onclick="switchTab('work')">
+      <span class="icon">🚗</span>
       <span>Work</span>
     </div>
-    <div class="tab-item" onclick="openFuelWeek()">
+    <div id="nav-fuel" class="tab-item" onclick="switchTab('fuel')">
+      <span class="icon">⛽</span>
       <span>Fuel</span>
     </div>
-    <div class="tab-item" onclick="openPersonalTripsLog()">
-      <span>Trips</span>
+    <div id="nav-settings" class="tab-item" onclick="switchTab('settings')">
+      <span class="icon">🔧</span>
+      <span>Maintenance</span>
     </div>
   </nav>
 
-  <!-- MODAL 1: Weekly Sessions Overlay -->
+  <!-- OVERLAY 1: Work Sessions Statement Sheet -->
   <div id="session-week-overlay" class="tab-modal-overlay" onclick="closeOverlayOnBackdrop(event, 'session-week-overlay')">
     <div class="tab-modal-card">
       <div class="tab-modal-header">
@@ -236,12 +380,12 @@
         <button class="btn btn-ghost" onclick="closeSessionsWeek()">✕</button>
       </div>
       <div id="session-week-content" class="tab-modal-body">
-        <!-- Rendered via JS -->
+        <!-- Dynamic Content -->
       </div>
     </div>
   </div>
 
-  <!-- MODAL 2: Weekly Fuel Overlay -->
+  <!-- OVERLAY 2: Fuel Statement Sheet -->
   <div id="fuel-week-overlay" class="tab-modal-overlay" onclick="closeOverlayOnBackdrop(event, 'fuel-week-overlay')">
     <div class="tab-modal-card">
       <div class="tab-modal-header">
@@ -249,12 +393,12 @@
         <button class="btn btn-ghost" onclick="closeFuelWeek()">✕</button>
       </div>
       <div id="fuel-week-content" class="tab-modal-body">
-        <!-- Rendered via JS -->
+        <!-- Dynamic Content -->
       </div>
     </div>
   </div>
 
-  <!-- MODAL 3: Personal Trips Overlay -->
+  <!-- OVERLAY 3: Personal Trips Sheet -->
   <div id="personal-trips-overlay" class="tab-modal-overlay" onclick="closeOverlayOnBackdrop(event, 'personal-trips-overlay')">
     <div class="tab-modal-card">
       <div class="tab-modal-header">
@@ -262,37 +406,36 @@
         <button class="btn btn-ghost" onclick="closePersonalTripsLog()">✕</button>
       </div>
       <div class="tab-modal-body">
-        <!-- Inline Form for New Personal Trip -->
         <div class="card" style="background: #f9fafb; margin-bottom: 16px;">
-          <h4 style="margin-bottom: 10px; font-size: 0.9rem;">Add New Personal Trip</h4>
+          <div class="card-title" style="font-size: 0.9rem;">Add Personal Trip</div>
           <div class="form-group">
-            <label>Distance Driven (KM)</label>
-            <input type="number" id="trip-km" placeholder="e.g. 15" />
+            <label>Distance (KM)</label>
+            <input type="number" id="trip-km" placeholder="e.g. 12" />
           </div>
           <div class="form-group">
-            <label>Purpose / Note</label>
-            <input type="text" id="trip-note" placeholder="e.g. Grocery run" />
+            <label>Purpose / Reason</label>
+            <input type="text" id="trip-note" placeholder="e.g. Grocery store" />
           </div>
-          <button class="btn btn-primary" style="width: 100%;" onclick="savePersonalTrip()">Save Trip</button>
+          <button class="btn btn-primary" onclick="savePersonalTrip()">Save Trip</button>
         </div>
 
         <div id="personal-trips-content">
-          <!-- Rendered via JS -->
+          <!-- Dynamic Content -->
         </div>
       </div>
     </div>
   </div>
 
-  <!-- APPLICATION LOGIC -->
+  <!-- JAVASCRIPT CONTROLLER & LOGIC -->
   <script>
-    // --- APP STATE & LOCAL STORAGE INITIALIZATION ---
+    // --- STATE MANAGEMENT ---
     let sessions = [];
     let fuelEntries = [];
     let fixedExpenses = [];
     let maintenanceList = [];
     let personalTrips = [];
     let loan = null;
-    let fuelCostPerKm = 3.50; // Default estimate
+    let fuelCostPerKm = 3.50; // Dynamic or estimated rate per KM
 
     function loadArr() {
       sessions = JSON.parse(localStorage.getItem('app_sessions') || '[]');
@@ -315,7 +458,19 @@
       localStorage.setItem('app_loan', JSON.stringify(loan));
     }
 
-    // --- SANITIZATION & CALCULATION HELPERS ---
+    // --- TAB SWITCHER FIX ---
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+
+      const targetTab = document.getElementById(`tab-${tabName}`);
+      if (targetTab) targetTab.classList.add('active');
+
+      const targetNav = document.getElementById(`nav-${tabName}`);
+      if (targetNav) targetNav.classList.add('active');
+    }
+
+    // --- CALCULATIONS & SANITIZATION ---
     const parseNumber = (val) => Number(String(val || 0).replace(/,/g, '')) || 0;
 
     function fxDailyCost(exp) {
@@ -335,27 +490,6 @@
       });
     };
 
-    function getSessionBreakMinutes(session) {
-      return (session.breaks || []).reduce((total, p) => {
-        let start = new Date(`${session.date}T${p.startTime}`);
-        let end = new Date(`${session.date}T${p.endTime}`);
-        if (end < start) {
-          end.setDate(end.getDate() + 1); // Crosses midnight
-        }
-        return total + (end - start) / (1000 * 60);
-      }, 0);
-    }
-
-    function getNextAmortizationDate(baseDate, monthOffset) {
-      const d = new Date(baseDate);
-      const targetMonth = d.getMonth() + monthOffset;
-      d.setMonth(targetMonth, 1);
-      const maxDaysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      d.setDate(Math.min(baseDate.getDate(), maxDaysInMonth));
-      return d;
-    }
-
-    // --- MAINTENANCE AMORTIZATION ENGINE ---
     function getAmortizedMaintenanceCost(item, dailyAvgKm = 0) {
       const cost = parseNumber(item.cost);
       if (cost <= 0) return 0;
@@ -379,7 +513,6 @@
       return list.reduce((total, item) => total + getAmortizedMaintenanceCost(item, dailyAvgKm), 0);
     }
 
-    // --- INTEGRATED DAILY BREAKEVEN CALCULATION ---
     function calculateDailyBreakeven({ fixedExpenses = [], maintenanceList = [], loanDetails = null, fuelCostPerKm = 0, targetDailyKm = 0 }) {
       const dailyFixedCosts = fixedExpenses.reduce((sum, item) => sum + fxDailyCost(item), 0);
       const dailyLoanEmi = loanDetails && loanDetails.monthlyEmi ? parseNumber(loanDetails.monthlyEmi) / 30 : 0;
@@ -392,7 +525,7 @@
       return { dailyFixedCosts, dailyLoanEmi, dailyMaintenanceCost, dailyFuelCost, totalDailyBreakeven, breakevenPerKm };
     }
 
-    // --- MODAL & OVERLAY CONTROLLERS ---
+    // --- MODAL SHEET CONTROLLERS ---
     function openTabOverlay(overlayId, renderCallback) {
       if (typeof renderCallback === 'function') renderCallback();
       const overlay = document.getElementById(overlayId);
@@ -425,117 +558,71 @@
     const openPersonalTripsLog = () => openTabOverlay('personal-trips-overlay', renderPersonalTripsContent);
     const closePersonalTripsLog = () => closeTabOverlay('personal-trips-overlay');
 
-    // --- RENDERING HANDLERS ---
-    function renderSessionsWeekContent() {
-      const el = document.getElementById('session-week-content');
-      if (!el) return;
-      if (sessions.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">No work sessions recorded.</p>';
-        return;
-      }
-      el.innerHTML = sessions.map(s => `
-        <div class="card" style="margin-bottom:10px;">
-          <div style="display:flex; justify-between;">
-            <strong>${s.date}</strong>
-            <span>Earnings: ₹${parseNumber(s.earnings).toFixed(2)}</span>
-          </div>
-        </div>
-      `).join('');
-    }
+    // --- FORM ACTIONS ---
+    function saveWorkSession() {
+      const earnings = parseNumber(document.getElementById('work-earnings').value);
+      const km = parseNumber(document.getElementById('work-km').value);
+      if (earnings <= 0 && km <= 0) return;
 
-    function renderFuelWeekContent() {
-      const el = document.getElementById('fuel-week-content');
-      if (!el) return;
-      const sorted = fuelSorted();
-      if (sorted.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">No fuel logs recorded.</p>';
-        return;
-      }
-      el.innerHTML = sorted.map(f => `
-        <div class="card" style="margin-bottom:10px;">
-          <div style="display:flex; justify-between;">
-            <strong>${f.date} ${f.time || ''}</strong>
-            <span>Cost: ₹${parseNumber(f.cost).toFixed(2)}</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderPersonalTripsContent() {
-      const container = document.getElementById('personal-trips-content');
-      if (!container) return;
-
-      if (personalTrips.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:20px;">No personal trips recorded.</p>';
-        return;
-      }
-
-      container.innerHTML = personalTrips.map(trip => {
-        const km = parseNumber(trip.km);
-        const estCost = (km * fuelCostPerKm).toFixed(2);
-        return `
-          <div class="card" style="margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-              <strong>${trip.date}</strong>
-              <span style="color:var(--primary-color); font-weight:600;">${km} KM</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--text-muted);">
-              <span>${trip.note || 'Personal Use'}</span>
-              <span>Fuel Cost: ₹${estCost}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function savePersonalTrip() {
-      const kmInput = document.getElementById('trip-km');
-      const noteInput = document.getElementById('trip-note');
-
-      const km = parseNumber(kmInput.value);
-      if (km <= 0) return;
-
-      const newTrip = {
+      sessions.unshift({
         id: Date.now().toString(),
         date: new Date().toISOString().split('T')[0],
-        km: km,
-        note: noteInput.value || 'Personal'
-      };
-
-      personalTrips.unshift(newTrip);
+        earnings,
+        km
+      });
       saveState();
-      
-      kmInput.value = '';
-      noteInput.value = '';
-      renderPersonalTripsContent();
+      document.getElementById('work-earnings').value = '';
+      document.getElementById('work-km').value = '';
       renderDashboard();
+      switchTab('dashboard');
     }
 
-    function renderDashboard() {
-      const statusEl = document.getElementById('dashboard-status');
-      if (!statusEl) return;
+    function saveFuelEntry() {
+      const cost = parseNumber(document.getElementById('fuel-cost').value);
+      const distance = parseNumber(document.getElementById('fuel-distance').value);
+      if (cost <= 0) return;
 
-      const targetKmToday = 120; // Default daily target driving distance
-      const breakeven = calculateDailyBreakeven({
-        fixedExpenses,
-        maintenanceList,
-        loanDetails: loan,
-        fuelCostPerKm,
-        targetDailyKm: targetKmToday
+      fuelEntries.unshift({
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().slice(0, 5),
+        cost,
+        distance
       });
 
-      statusEl.innerHTML = `
-        <strong>Daily Breakeven Target:</strong> ₹${breakeven.totalDailyBreakeven.toFixed(2)}<br/>
-        <span style="font-size:0.8rem;">(Based on ${targetKmToday} km target @ ₹${breakeven.breakevenPerKm.toFixed(2)}/km)</span>
-      `;
+      if (distance > 0) {
+        fuelCostPerKm = cost / distance;
+      }
+
+      saveState();
+      document.getElementById('fuel-cost').value = '';
+      document.getElementById('fuel-distance').value = '';
+      renderDashboard();
+      switchTab('dashboard');
     }
 
-    // --- APP INITIALIZATION ---
-    document.addEventListener('DOMContentLoaded', () => {
-      loadArr();
-      loadObj();
+    function saveMaintenanceItem() {
+      const name = document.getElementById('maint-name').value.trim();
+      const cost = parseNumber(document.getElementById('maint-cost').value);
+      const type = document.getElementById('maint-type').value;
+      const interval = parseNumber(document.getElementById('maint-interval').value);
+
+      if (!name || cost <= 0 || interval <= 0) return;
+
+      maintenanceList.push({
+        id: Date.now().toString(),
+        name,
+        cost,
+        type,
+        intervalKm: type === 'km' ? interval : 0,
+        intervalDays: type === 'duration' ? interval : 0
+      });
+
+      saveState();
+      document.getElementById('maint-name').value = '';
+      document.getElementById('maint-cost').value = '';
+      document.getElementById('maint-interval').value = '';
+      renderMaintenanceList();
       renderDashboard();
-    });
-  </script>
-</body>
-</html>
+    }
+
