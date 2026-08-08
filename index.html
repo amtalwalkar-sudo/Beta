@@ -1,0 +1,2165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#15121C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Kanishka Fleet BETA — Daily Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+// Registers service-worker.js if present (PWA deployments). Harmless no-op for the
+// standalone-file version, which has no service worker alongside it — the request
+// just fails silently and the rest of the app works exactly the same either way.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{ /* not present — fine, standalone use */ });
+  });
+}
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --bg:#15121C;
+    --surface:#1D1927;
+    --surface-2:#262032;
+    --surface-3:#332B41;
+    --text:#EDEFF5;
+    --text-dim:#9188A6;
+    --led:#B565E8;
+    --led-dim:#5A3A6B;
+    --led-glow: rgba(181,101,232,0.35);
+    --green:#3ECF8E;
+    --red:#FF5470;
+    --divider:#2C2638;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+    --display: 'Space Grotesk', sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(255,107,53,0.07), transparent 45%),
+      radial-gradient(circle at 100% 30%, rgba(62,207,142,0.04), transparent 40%);
+  }
+  #app-header{
+    padding:16px 18px 12px 18px; flex-shrink:0;
+    border-bottom:1px solid var(--divider);
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  #app-header .eyebrow{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.13em; color:var(--led);
+    text-transform:uppercase;
+  }
+  #app-header h1{
+    font-family:var(--display); font-size:21px; margin:2px 0 0 0; font-weight:600; letter-spacing:-0.01em;
+  }
+  #app-header .sub{ font-size:12px; color:var(--text-dim); margin-top:2px; font-family:var(--sans); }
+
+  main{ flex:1; overflow-y:auto; padding:16px 16px 96px 16px; -webkit-overflow-scrolling:touch; }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; animation:fadeIn .22s cubic-bezier(.2,.8,.3,1); }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  nav#tabbar{
+    position:fixed; bottom:0; left:0; right:0;
+    display:flex; background:rgba(25,29,39,0.92); backdrop-filter:blur(14px);
+    border-top:1px solid var(--divider);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+    z-index:20;
+  }
+  nav#tabbar button{
+    flex:1; background:none; border:none; color:var(--text-dim);
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:10px 4px 8px 4px; font-family:var(--sans); font-size:10.5px; font-weight:500;
+    letter-spacing:0.02em; transition:color .15s ease;
+  }
+  nav#tabbar button svg{ width:22px; height:22px; transition:transform .15s ease; }
+  nav#tabbar button.active{ color:var(--led); }
+  nav#tabbar button.active svg{ transform:translateY(-1px); }
+  nav#tabbar button:active svg{ transform:scale(0.88); }
+  nav#tabbar button .dot{
+    width:3.5px; height:3.5px; border-radius:50%; background:var(--led); margin-top:-2px;
+    opacity:0; transition:opacity .15s ease;
+  }
+  nav#tabbar button.active .dot{ opacity:1; }
+
+  /* Cards — subtle logbook rule-line texture */
+  .card{
+    background:var(--surface); border:1px solid var(--divider); border-radius:14px;
+    padding:16px; margin-bottom:14px; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:repeating-linear-gradient(180deg, transparent, transparent 27px, rgba(255,255,255,0.018) 27px, rgba(255,255,255,0.018) 28px);
+    opacity:0.6;
+  }
+  .card > *{ position:relative; }
+  .card h2{
+    font-family:var(--display); font-size:12.5px; text-transform:uppercase; letter-spacing:0.09em;
+    color:var(--text-dim); margin:0 0 12px 0; font-weight:600;
+  }
+  label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px; margin-top:12px; }
+  label:first-of-type{ margin-top:0; }
+  input, select{
+    width:100%; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);
+    border-radius:9px; padding:11px 12px; font-size:15px; font-family:var(--sans);
+    transition:border-color .15s ease;
+  }
+  input[type="date"], input[type="time"], input[type="number"], input[type="text"]{ font-family:var(--mono); }
+  input:focus, select:focus{ outline:none; border-color:var(--led); box-shadow:0 0 0 3px var(--led-glow); }
+
+  .btn{
+    display:block; width:100%; text-align:center; padding:14px; border-radius:11px;
+    font-family:var(--display); font-weight:600; font-size:15px; border:none; margin-top:16px;
+    cursor:pointer; transition:transform .1s ease, opacity .1s ease;
+  }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{ background:var(--led); color:#1A0E24; box-shadow:0 4px 14px rgba(181,101,232,0.25); }
+  .btn-primary:active{ background:#E85A26; }
+  .btn-danger{ background:transparent; border:1px solid var(--red); color:var(--red); }
+  .btn-ghost{ background:var(--surface-2); color:var(--text); border:1px solid var(--surface-3); }
+
+  .row{ display:flex; gap:10px; }
+  .row > *{ flex:1; }
+
+  /* Meter — signature element styled as a taxi fare-meter flag/display */
+  .meter{
+    background:radial-gradient(ellipse at 50% -20%, rgba(255,107,53,0.12), transparent 60%), linear-gradient(180deg, #171B24 0%, #0E1119 100%);
+    border:1px solid var(--led-dim); border-radius:18px; padding:22px 20px;
+    text-align:center; margin-bottom:16px; position:relative; overflow:hidden;
+  }
+  .meter::before{
+    content:''; position:absolute; inset:0;
+    background:repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.02) 3px, rgba(255,255,255,0.02) 4px);
+    pointer-events:none;
+  }
+  .meter .flag{
+    display:inline-flex; align-items:center; gap:6px; background:rgba(255,107,53,0.12);
+    border:1px solid var(--led-dim); border-radius:20px; padding:4px 12px; margin-bottom:12px;
+  }
+  .meter .flag .pulse{
+    width:7px; height:7px; border-radius:50%; background:var(--led);
+    box-shadow:0 0 8px var(--led-glow); animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .meter .label{ font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--led); text-transform:uppercase; }
+  .meter .big{
+    font-family:var(--mono); font-size:46px; font-weight:600; color:var(--text); margin:4px 0; letter-spacing:0.03em;
+    text-shadow:0 0 20px rgba(255,107,53,0.15);
+  }
+  .meter .meta{ font-family:var(--mono); font-size:12.5px; color:var(--text-dim); }
+
+  .list-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:11px 0; border-bottom:1px solid var(--divider);
+  }
+  .list-row:last-child{ border-bottom:none; }
+  .list-row .main{ font-size:14px; }
+  .list-row .sub{ font-size:11.5px; color:var(--text-dim); font-family:var(--mono); margin-top:2px;}
+  .list-row .amt{ font-family:var(--mono); font-size:14.5px; font-weight:600; text-align:right; }
+  .list-row .del{ background:none; border:none; color:var(--text-dim); font-size:16px; padding:4px 8px; margin-left:6px; }
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .stat{
+    background:var(--surface-2); border-radius:11px; padding:12px 13px; text-align:left;
+    border:1px solid transparent;
+  }
+  .stat .k{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.06em; }
+  .stat .v{ font-family:var(--mono); font-size:19px; font-weight:600; margin-top:3px; }
+  .v.pos{ color:var(--green); }
+  .v.neg{ color:var(--red); }
+  .v.neu{ color:var(--led); }
+
+  /* Hero profit card on Dashboard */
+  .hero-profit{
+    border-radius:18px; padding:22px 20px; margin-bottom:14px; text-align:left;
+    border:1px solid var(--divider); transition:background .3s ease, border-color .3s ease;
+    background:var(--surface);
+  }
+  .hero-profit.pos{ background:linear-gradient(135deg, rgba(62,207,142,0.14), rgba(25,29,39,0.4)); border-color:rgba(62,207,142,0.3); }
+  .hero-profit.neg{ background:linear-gradient(135deg, rgba(255,84,112,0.14), rgba(25,29,39,0.4)); border-color:rgba(255,84,112,0.3); }
+  .hero-profit .k{ font-family:var(--mono); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); }
+  .hero-profit .v{ font-family:var(--display); font-size:36px; font-weight:700; margin-top:4px; }
+
+  .segmented{ display:flex; background:var(--surface-2); border-radius:10px; padding:3px; margin-bottom:14px; }
+  .segmented button{
+    flex:1; background:none; border:none; color:var(--text-dim); padding:8px; border-radius:8px;
+    font-size:12.5px; font-weight:600; font-family:var(--sans); transition:background .15s ease, color .15s ease;
+  }
+  .segmented button.active{ background:var(--led); color:#1A0E24; }
+
+  .empty{ color:var(--text-dim); font-size:13px; text-align:center; padding:18px 0; }
+  .helptext{ font-size:11.5px; color:var(--text-dim); margin-top:10px; line-height:1.5; }
+  .divider-label{
+    font-family:var(--display); font-size:11px; text-transform:uppercase; letter-spacing:0.1em;
+    color:var(--text-dim); margin:18px 0 8px 2px;
+  }
+  .badge{ font-family:var(--mono); font-size:10.5px; padding:2px 7px; border-radius:20px; font-weight:600;}
+  .badge.open{ background:rgba(255,107,53,0.15); color:var(--led); }
+  .badge.soon{ background:rgba(255,84,112,0.15); color:var(--red); }
+  .badge.ok{ background:rgba(62,207,142,0.15); color:var(--green); }
+
+  .renewal-banner{
+    background:rgba(255,84,112,0.1); border:1px solid rgba(255,84,112,0.3); border-radius:12px;
+    padding:12px 14px; margin-bottom:14px; font-size:13px; line-height:1.5;
+  }
+  .renewal-banner .title{ font-family:var(--display); font-weight:600; color:var(--red); font-size:13px; margin-bottom:4px; }
+
+  .export-banner{
+    background:rgba(255,107,53,0.1); border:1px solid var(--led-dim); border-radius:12px;
+    padding:12px 14px; margin-bottom:14px; font-size:13px; line-height:1.5;
+  }
+  .export-banner .title{ font-family:var(--display); font-weight:600; color:var(--led); font-size:13px; margin-bottom:4px; }
+
+  summary::-webkit-details-marker{ display:none; }
+  summary{ outline:none; }
+
+  /* ---------- Swipe-to-confirm slider (Start Work / End Session) ---------- */
+  .swipe-wrap{ margin-top:18px; }
+  .swipe-track{
+    position:relative; height:60px; border-radius:30px; background:var(--surface-2);
+    border:1px solid var(--surface-3); overflow:hidden; touch-action:pan-y;
+  }
+  .swipe-fill{
+    position:absolute; left:0; top:0; bottom:0; width:60px; border-radius:30px;
+    background:linear-gradient(90deg, var(--led-dim), var(--led)); opacity:0.9;
+  }
+  .swipe-label{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:var(--display); font-weight:600; font-size:14.5px; color:var(--text-dim);
+    letter-spacing:0.02em; pointer-events:none; transition:opacity .1s ease;
+  }
+  .swipe-knob{
+    position:absolute; left:4px; top:4px; width:52px; height:52px; border-radius:50%;
+    background:var(--led); display:flex; align-items:center; justify-content:center;
+    font-size:20px; color:#1A0E24; box-shadow:0 3px 10px rgba(181,101,232,0.4);
+    cursor:grab; touch-action:none; z-index:2;
+  }
+  .swipe-track.done .swipe-label{ color:#1A0E24; }
+
+  /* ---------- Sticky primary action zone (thumb reach) ---------- */
+  .sticky-cta{
+    position:sticky; bottom:-16px; margin:16px -16px -16px -16px; padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px)) 16px;
+    background:linear-gradient(180deg, rgba(18,21,28,0) 0%, var(--bg) 22%);
+    z-index:5;
+  }
+
+  /* ---------- Weekly Statement amount coloring (reused from earlier calendar work) ---------- */
+  .cal-list-amt.pos{ color:var(--green); }
+  .cal-list-amt.neg{ color:var(--red); }
+</style>
+
+</head>
+<body>
+
+<header id="app-header">
+  <div style="display:flex; justify-content:space-between; align-items:baseline;">
+    <div class="eyebrow">MH01EM7360 · WAGON R TOUR H3</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-family:var(--display); font-size:10px; font-weight:700; letter-spacing:0.08em; color:var(--bg); background:var(--led); padding:2px 8px; border-radius:10px;">BETA</span>
+      <span style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">● Saved on this device</span>
+    </div>
+  </div>
+  <h1 id="header-title">Work</h1>
+  <div class="sub" id="header-sub">Track today's driving sessions</div>
+</header>
+
+<main>
+  <!-- WORK TAB -->
+  <section class="tab-panel active" id="tab-work">
+    <div id="work-content"></div>
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat"><div class="k">Today's km</div><div class="v neu" id="today-km">0</div></div>
+      <div class="stat"><div class="k">Today's Income</div><div class="v neu" id="today-income">₹0</div></div>
+    </div>
+
+    <div class="divider-label" onclick="openSessionsWeek()" style="cursor:pointer;">Today's Sessions ›</div>
+    <div class="card" id="work-history"></div>
+
+    <details id="personal-trip-details">
+      <summary class="divider-label" style="cursor:pointer; list-style:none;">▸ Personal Use</summary>
+      <div class="card">
+        <h2>Log a Personal Trip</h2>
+        <label>Date</label>
+        <input type="date" id="pt-date">
+        <div class="row">
+          <div><label>Start Odometer (km)</label><input type="number" inputmode="decimal" id="pt-start-odo"></div>
+          <div><label>End Odometer (km)</label><input type="number" inputmode="decimal" id="pt-end-odo"></div>
+        </div>
+        <div class="helptext" id="pt-odo-warning" style="min-height:14px;"></div>
+        <label>Note (optional)</label>
+        <input type="text" id="pt-note" placeholder="e.g. family visit">
+        <button class="btn btn-ghost" onclick="savePersonalTrip()">Log Personal Trip</button>
+        <div class="helptext">Personal trips don't count as income and their km/fuel cost are excluded from the breakeven and profit calendar — logging them here just keeps your odometer and fuel records continuous and explainable.</div>
+      </div>
+      <div class="card" id="personal-history"></div>
+    </details>
+  </section>
+
+  <!-- FUEL TAB -->
+  <section class="tab-panel" id="tab-fuel">
+    <div class="card">
+      <h2>New Fuel Entry</h2>
+      <label>Date</label>
+      <input type="date" id="fuel-date">
+      <label>Time</label>
+      <input type="time" id="fuel-time">
+      <label>Odometer (km)</label>
+      <input type="number" inputmode="decimal" id="fuel-odo" placeholder="e.g. 12840">
+      <div class="helptext" id="fuel-odo-warning" style="min-height:14px;"></div>
+      <div class="row">
+        <div>
+          <label>Price / kg (₹)</label>
+          <input type="number" inputmode="decimal" id="fuel-price" placeholder="89">
+        </div>
+        <div>
+          <label>Amount Paid (₹)</label>
+          <input type="number" inputmode="decimal" id="fuel-amount" placeholder="720">
+        </div>
+      </div>
+      <div class="helptext" id="fuel-preview"></div>
+      <button class="btn btn-primary" onclick="saveFuelEntry()">Save Fuel Entry</button>
+    </div>
+    <div class="divider-label" onclick="openFuelWeek()" style="cursor:pointer;">History ›</div>
+    <div class="card" id="fuel-history"></div>
+  </section>
+
+  <!-- EXPENSES & LOAN TAB -->
+  <section class="tab-panel" id="tab-expenses">
+    <div class="segmented">
+      <button class="active" id="seg-fixed" onclick="switchExpSeg('fixed')">Fixed Expenses</button>
+      <button id="seg-loan" onclick="switchExpSeg('loan')">Loan</button>
+      <button id="seg-variable" onclick="switchExpSeg('variable')">Quick & Maint.</button>
+    </div>
+
+    <div id="exp-fixed-panel">
+      <div class="card">
+        <h2>Add Renewal / Document</h2>
+        <label>Type</label>
+        <select id="fx-type">
+          <option>Insurance</option>
+          <option>Road Tax</option>
+          <option>Permit</option>
+          <option>Authorization</option>
+          <option>Fitness Certificate</option>
+          <option>CNG Hydrotesting</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+        <input type="text" id="fx-type-other" placeholder="Enter custom type" style="margin-top:8px; display:none;">
+        <div class="row">
+          <div><label>Issue Date</label><input type="date" id="fx-issue"></div>
+          <div><label>Expiry Date</label><input type="date" id="fx-expiry"></div>
+        </div>
+        <label>Renewal Cost (₹)</label>
+        <input type="number" inputmode="decimal" id="fx-cost" placeholder="18500">
+        <button class="btn btn-primary" onclick="saveFixedExpense()">Save</button>
+      </div>
+      <div class="divider-label">Daily Fixed Cost</div>
+      <div class="card" id="fx-list"></div>
+    </div>
+
+    <div id="exp-loan-panel" style="display:none;">
+      <div class="card">
+        <h2>Loan Terms</h2>
+        <label>Principal (₹)</label>
+        <input type="number" inputmode="decimal" id="ln-principal" placeholder="450000">
+        <div class="row">
+          <div><label>Interest Rate (% p.a.)</label><input type="number" inputmode="decimal" id="ln-rate" placeholder="9.5"></div>
+          <div><label>Tenure (months)</label><input type="number" inputmode="decimal" id="ln-tenure" placeholder="48"></div>
+        </div>
+        <label>Start Date</label>
+        <input type="date" id="ln-start">
+        <button class="btn btn-primary" onclick="saveLoan()">Save Loan Terms</button>
+        <button class="btn btn-danger" id="ln-delete-btn" onclick="deleteLoan()" style="display:none;">Delete Loan Record</button>
+        <div class="helptext" id="ln-emi-preview"></div>
+      </div>
+
+      <div class="card">
+        <h2>Log a Prepayment</h2>
+        <div class="row">
+          <div><label>Date</label><input type="date" id="pp-date"></div>
+          <div><label>Amount (₹)</label><input type="number" inputmode="decimal" id="pp-amount" placeholder="50000"></div>
+        </div>
+        <button class="btn btn-ghost" onclick="savePrepayment()">Add Prepayment</button>
+        <div class="helptext">A prepayment keeps your EMI the same but pays the loan off sooner — it reduces the balance shown below straight away.</div>
+      </div>
+
+      <div class="divider-label">Loan Status</div>
+      <div class="card" id="loan-status"></div>
+      <div class="divider-label">Prepayments Logged</div>
+      <div class="card" id="pp-list"></div>
+    </div>
+
+    <div id="exp-variable-panel" style="display:none;">
+      <div class="card">
+        <h2>Quick Expense</h2>
+        <label>Category</label>
+        <select id="qe-category">
+          <option>Food</option>
+          <option>Toll</option>
+          <option>Parking</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+        <input type="text" id="qe-category-other" placeholder="Enter custom category" style="margin-top:8px; display:none;">
+        <label>Amount (₹)</label>
+        <input type="number" inputmode="decimal" id="qe-amount" placeholder="50">
+        <button class="btn btn-primary" onclick="saveQuickExpense()">Log Expense</button>
+        <div class="helptext">These count as real costs and are subtracted from your profit on the Dashboard and Weekly Statement — same as fuel.</div>
+      </div>
+      <div class="divider-label">Today's Quick Expenses</div>
+      <div class="card" id="quick-expense-history"></div>
+
+      <div class="divider-label">Maintenance & Servicing</div>
+      <div class="card">
+        <h2>Log a Service</h2>
+        <label>Service Type</label>
+        <select id="mt-type">
+          <option>General Service</option>
+          <option>Oil Change</option>
+          <option>Tire Rotation/Replacement</option>
+          <option>Brake Service</option>
+          <option>Battery</option>
+          <option value="__other">Other (type below)</option>
+        </select>
+        <input type="text" id="mt-type-other" placeholder="Enter custom service type" style="margin-top:8px; display:none;">
+        <div class="row">
+          <div><label>Service Date</label><input type="date" id="mt-date"></div>
+          <div><label>Odometer (km)</label><input type="number" inputmode="decimal" id="mt-odo"></div>
+        </div>
+        <label>Cost (₹)</label>
+        <input type="number" inputmode="decimal" id="mt-cost" placeholder="1500">
+        <div class="row">
+          <div><label>Next Due Odometer (optional)</label><input type="number" inputmode="decimal" id="mt-next-odo" placeholder="e.g. 22000"></div>
+          <div><label>Next Due Date (optional)</label><input type="date" id="mt-next-date"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveMaintenance()">Log Service</button>
+        <div class="helptext">Set either or both "next due" fields — you'll get a warning when you're within 500 km or 30 days of whichever comes first, same logic as real service schedules. Service cost is also subtracted from your profit like other expenses.</div>
+      </div>
+      <div class="divider-label">Service History</div>
+      <div class="card" id="maintenance-history"></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD TAB -->
+  <section class="tab-panel" id="tab-dashboard">
+    <div id="renewal-banner"></div>
+    <div class="segmented">
+      <button class="active" id="seg-day" onclick="switchDashRange('day')">Today</button>
+      <button id="seg-week" onclick="switchDashRange('week')">7 Days</button>
+      <button id="seg-month" onclick="switchDashRange('month')">30 Days</button>
+    </div>
+    <div class="hero-profit" id="profit-hero">
+      <div class="k">Profit — <span id="profit-hero-range">Today</span></div>
+      <div class="v" id="dash-profit">₹0</div>
+    </div>
+    <div class="card">
+      <h2>Income vs Breakeven</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Income</div><div class="v neu" id="dash-income">₹0</div></div>
+        <div class="stat"><div class="k">Breakeven Target</div><div class="v" id="dash-breakeven">₹0</div></div>
+        <div class="stat"><div class="k">Revenue After Fuel</div><div class="v neu" id="dash-revfuel">₹0</div></div>
+        <div class="stat"><div class="k">km Driven</div><div class="v" id="dash-km">0</div></div>
+        <div class="stat"><div class="k">Quick Expenses</div><div class="v" id="dash-quickexp">₹0</div></div>
+        <div class="stat"><div class="k">Maintenance</div><div class="v" id="dash-maintexp">₹0</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Fuel Mileage & Rate</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Avg km / kg</div><div class="v neu" id="dash-mileage">—</div></div>
+        <div class="stat"><div class="k">Avg Cost / km</div><div class="v neu" id="dash-costperkm">—</div></div>
+        <div class="stat"><div class="k">Revenue / Hour</div><div class="v neu" id="dash-revhr">₹0/hr</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Loan</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Remaining Balance</div><div class="v" id="dash-loan-balance">—</div></div>
+        <div class="stat"><div class="k">Tenure Left</div><div class="v" id="dash-loan-tenure">—</div></div>
+      </div>
+    </div>
+    <div class="helptext">Breakeven Target = daily fixed-cost renewals + loan EMI (prorated to the window) + average fuel cost/km × km driven. "7 Days" and "30 Days" are rolling windows ending today. (Cost/km needs at least 2 fuel entries with increasing odometer readings to calculate — mileage is measured between fill-ups.)</div>
+
+    <div class="divider-label">Weekly Statement</div>
+    <div class="card" id="weekly-statement"></div>
+  </section>
+
+  <!-- BACKUP TAB -->
+  <section class="tab-panel" id="tab-backup">
+    <div class="card">
+      <h2>Cloud Backup (BETA slot — separate from Stable)</h2>
+      <div class="helptext" id="cloud-backup-status">Checking last cloud backup…</div>
+      <button class="btn btn-primary" onclick="backupToCloud()">Backup Now</button>
+      <button class="btn btn-ghost" onclick="restoreFromCloud()">Restore Now</button>
+      <div class="helptext">Backs up to your own Firebase project — no sign-in needed. Overwrites the previous cloud backup each time (only the latest copy is kept). Restoring replaces whatever's on this device, so it also takes a local safety snapshot first, same as Import.</div>
+    </div>
+    <div id="export-reminder-banner"></div>
+    <div class="card">
+      <h2>Export / Import Data</h2>
+      <button class="btn btn-primary" onclick="exportData()">Save Backup File (.json)</button>
+      <div class="helptext" id="export-location-note">Saves to your phone's regular <strong>Downloads</strong> folder — open the Files app → Downloads to find <span id="export-filename-preview"></span>, then move it to Drive/Dropbox/email yourself from there.</div>
+      <button class="btn btn-ghost" id="share-backup-btn" onclick="shareBackup()" style="display:none; margin-top:14px;">Try Direct Share Instead</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('import-file-input').click()">Import Data (.json)</button>
+      <input type="file" id="import-file-input" accept="application/json" style="display:none;" onchange="importData(event)">
+      <div class="helptext">"Try Direct Share Instead" attempts to open your phone's native share sheet directly to Drive/Gmail/WhatsApp — but this doesn't work reliably on every phone or browser (Chrome's file-sharing support varies), so it's offered as an extra option, not the main path. If it fails, it automatically falls back to the regular Save above.</div>
+    </div>
+    <div class="card">
+      <h2>Same-Day Snapshot</h2>
+      <div class="helptext" id="snapshot-info">No snapshot yet.</div>
+      <button class="btn btn-ghost" id="snapshot-restore-btn" onclick="restoreSnapshot()" style="display:none;">Restore from Snapshot</button>
+      <div class="helptext">The app quietly saves a same-day snapshot automatically, and right before every Import — so a bad import or an accidental mistake can be undone. <strong>This does not protect against clearing browser data or reinstalling</strong> — only Export (above) is a true off-device backup.</div>
+    </div>
+    <div class="card">
+      <h2>Reset App</h2>
+      <button class="btn btn-danger" onclick="resetApp()">Delete All Data & Reset</button>
+      <div class="helptext">Wipes everything on this device — sessions, fuel log, expenses, loan, personal trips, and the snapshot. Useful for starting fresh or troubleshooting. <strong>This cannot be undone</strong> — export a backup first if there's anything you want to keep.</div>
+    </div>
+  </section>
+</main>
+
+<nav id="tabbar">
+  <button class="active" id="nav-work" onclick="switchTab('work')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12l2-6h14l2 6M5 12h14v5H5z"/><circle cx="7.5" cy="17.5" r="1.3"/><circle cx="16.5" cy="17.5" r="1.3"/></svg>
+    <span>Work</span><span class="dot"></span>
+  </button>
+  <button id="nav-fuel" onclick="switchTab('fuel')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c2 2.5 5 6 5 9a5 5 0 0 1-10 0c0-3 3-6.5 5-9z"/></svg>
+    <span>Fuel</span><span class="dot"></span>
+  </button>
+  <button id="nav-expenses" onclick="switchTab('expenses')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+    <span>Expenses</span><span class="dot"></span>
+  </button>
+  <button id="nav-dashboard" onclick="switchTab('dashboard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-4M12 7v1M17 12h1M7 12h1"/></svg>
+    <span>Dashboard</span><span class="dot"></span>
+  </button>
+  <button id="nav-backup" onclick="switchTab('backup')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+    <span>Backup</span><span class="dot"></span>
+  </button>
+</nav>
+
+<div id="confirm-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:100; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--divider); border-radius:16px; padding:22px; max-width:320px; width:100%;">
+    <div id="confirm-message" style="font-size:15px; margin-bottom:14px; line-height:1.5; white-space:pre-line;"></div>
+    <input type="number" inputmode="decimal" id="confirm-amount-input" placeholder="Amount (₹)" style="display:none; margin-bottom:14px;">
+    <div class="row">
+      <button class="btn btn-ghost" style="margin-top:0;" onclick="closeConfirm(false)">Cancel</button>
+      <button class="btn btn-danger" id="confirm-action-btn" style="margin-top:0;" onclick="closeConfirm(true)">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="week-detail-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeWeekDetail()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="weekDetailNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="week-detail-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);" id="week-detail-subtitle"></div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="weekDetailNav(1)">›</button>
+    </div>
+    <div class="hero-profit" id="week-detail-hero">
+      <div class="k">Week Profit</div>
+      <div class="v" id="week-detail-profit">₹0</div>
+    </div>
+    <div class="card">
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Income</div><div class="v neu" id="week-detail-income">₹0</div></div>
+        <div class="stat"><div class="k">Breakeven</div><div class="v" id="week-detail-breakeven">₹0</div></div>
+        <div class="stat"><div class="k">Online Hours</div><div class="v" id="week-detail-hours">0h</div></div>
+        <div class="stat"><div class="k">km Driven</div><div class="v" id="week-detail-km">0</div></div>
+      </div>
+    </div>
+    <div class="divider-label">Day by Day</div>
+    <div class="card" id="week-detail-days"></div>
+  </div>
+</div>
+
+<div id="session-week-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeSessionsWeek()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="sessionsWeekNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="session-week-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tap ‹ › to browse other weeks</div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="sessionsWeekNav(1)">›</button>
+    </div>
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat"><div class="k">Week Income</div><div class="v neu" id="session-week-income">₹0</div></div>
+      <div class="stat"><div class="k">Week km</div><div class="v" id="session-week-km">0</div></div>
+    </div>
+    <div class="card" id="session-week-entries"></div>
+  </div>
+</div>
+
+<div id="fuel-week-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:120; overflow-y:auto;">
+  <div style="padding:16px 16px 40px 16px;">
+    <button class="btn btn-ghost" style="margin-top:0; margin-bottom:16px;" onclick="closeFuelWeek()">✕ Close</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="fuelWeekNav(-1)">‹</button>
+      <div style="text-align:center;">
+        <div style="font-family:var(--display); font-weight:600; font-size:16px;" id="fuel-week-title"></div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">Tap ‹ › to browse other weeks</div>
+      </div>
+      <button class="btn-ghost" style="width:44px; height:44px; padding:0; border-radius:10px; font-size:18px; background:var(--surface-2); border:1px solid var(--surface-3); color:var(--text);" onclick="fuelWeekNav(1)">›</button>
+    </div>
+    <div class="card" id="fuel-week-entries"></div>
+  </div>
+</div>
+
+<script>
+// ---------- Storage (localStorage — works standalone, on-device, no login/internet needed) ----------
+async function loadArr(key){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : []; }
+  catch(e){ return []; }
+}
+async function loadObj(key){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }
+  catch(e){ return null; }
+}
+async function save(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); }
+  catch(e){ console.error('storage error', e); showAlert('Could not save on this device (storage may be full or blocked in your browser settings).'); }
+}
+
+// ---------- Custom confirm/alert (native browser confirm()/alert() can be silently
+// blocked in some embedded/sandboxed views, which is why deletes were failing) ----------
+let _confirmResolve = null;
+let _confirmMode = 'confirm';
+function showConfirm(message){
+  return new Promise(resolve=>{
+    _confirmResolve = resolve;
+    _confirmMode = 'confirm';
+    document.getElementById('confirm-message').textContent = message;
+    document.getElementById('confirm-amount-input').style.display='none';
+    const overlay = document.getElementById('confirm-overlay');
+    overlay.querySelectorAll('button')[0].style.display='block';
+    overlay.querySelectorAll('button')[1].textContent='Delete';
+    overlay.style.display='flex';
+  });
+}
+function showAlert(message){
+  _confirmMode = 'alert';
+  document.getElementById('confirm-message').textContent = message;
+  document.getElementById('confirm-amount-input').style.display='none';
+  const overlay = document.getElementById('confirm-overlay');
+  overlay.querySelectorAll('button')[0].style.display='none';
+  overlay.querySelectorAll('button')[1].textContent='OK';
+  _confirmResolve = null;
+  overlay.style.display='flex';
+}
+// Lightweight "tap category, type amount, done" prompt — used by the Work-tab quick
+// expense strip. Resolves with a number, or null if cancelled/left blank.
+function showAmountPrompt(title){
+  return new Promise(resolve=>{
+    _confirmResolve = resolve;
+    _confirmMode = 'amount';
+    document.getElementById('confirm-message').textContent = title;
+    const input = document.getElementById('confirm-amount-input');
+    input.style.display = 'block';
+    input.value = '';
+    const overlay = document.getElementById('confirm-overlay');
+    overlay.querySelectorAll('button')[0].style.display='block';
+    overlay.querySelectorAll('button')[1].textContent='Save';
+    overlay.style.display='flex';
+    setTimeout(()=>input.focus(), 50);
+  });
+}
+function closeConfirm(result){
+  document.getElementById('confirm-overlay').style.display='none';
+  if(_confirmResolve){
+    if(_confirmMode==='amount'){
+      const val = Number(document.getElementById('confirm-amount-input').value);
+      _confirmResolve(result && val>0 ? val : null);
+    } else {
+      _confirmResolve(result);
+    }
+    _confirmResolve=null;
+  }
+}
+
+function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
+
+// Best-effort GPS capture — never blocks the save if location is unavailable/denied/slow.
+// Returns {lat, lng, ts} or null. ts = epoch ms, the precise moment of capture.
+function getGpsLocation(){
+  return new Promise(resolve=>{
+    if(!navigator.geolocation){ resolve(null); return; }
+    const timer = setTimeout(()=>resolve(null), 7000);
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        clearTimeout(timer);
+        resolve({
+          lat: Math.round(pos.coords.latitude*1e6)/1e6,
+          lng: Math.round(pos.coords.longitude*1e6)/1e6,
+          ts: Date.now()
+        });
+      },
+      ()=>{ clearTimeout(timer); resolve(null); },
+      {enableHighAccuracy:true, timeout:6500, maximumAge:0}
+    );
+  });
+}
+function mapsLink(loc){
+  return `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+}
+function fmtLocTime(ts){
+  return new Date(ts).toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+// Reusable swipe-to-confirm slider. Uses Pointer Events with capture so drag works
+// even if the finger moves outside the knob — no window-level listeners, no leaks.
+function createSwipeButton(containerEl, label, onComplete){
+  containerEl.innerHTML = `
+    <div class="swipe-wrap">
+      <div class="swipe-track">
+        <div class="swipe-fill" style="width:60px;"></div>
+        <div class="swipe-label">${label}</div>
+        <div class="swipe-knob">➜</div>
+      </div>
+      <div class="helptext" id="swipe-status" style="text-align:center; min-height:14px;"></div>
+    </div>`;
+  const track = containerEl.querySelector('.swipe-track');
+  const knob = containerEl.querySelector('.swipe-knob');
+  const fill = containerEl.querySelector('.swipe-fill');
+  const labelEl = containerEl.querySelector('.swipe-label');
+  const statusEl = containerEl.querySelector('#swipe-status');
+  let dragging=false, startX=0, knobX=0, done=false;
+  const maxX = () => track.clientWidth - knob.offsetWidth - 8;
+  function setX(x){
+    x = Math.max(0, Math.min(maxX(), x));
+    knob.style.transform = `translateX(${x}px)`;
+    fill.style.width = (x + knob.offsetWidth) + 'px';
+    labelEl.style.opacity = Math.max(0, 1 - (x/Math.max(1,maxX()))*1.5);
+    return x;
+  }
+  function onDown(e){
+    if(done) return;
+    dragging = true;
+    startX = e.clientX - knobX;
+    knob.setPointerCapture(e.pointerId);
+    knob.style.transition='none'; fill.style.transition='none';
+  }
+  function onMove(e){
+    if(!dragging || done) return;
+    knobX = setX(e.clientX - startX);
+  }
+  function onUp(e){
+    if(!dragging || done) return;
+    dragging=false;
+    knob.style.transition='transform .25s ease'; fill.style.transition='width .25s ease';
+    if(knobX >= maxX()*0.8){
+      done = true;
+      knobX = setX(maxX());
+      track.classList.add('done');
+      vibrate(35);
+      setTimeout(async ()=>{
+        if(statusEl) statusEl.textContent = '📍 Getting location…';
+        const result = await onComplete();
+        if(statusEl) statusEl.textContent = '';
+        if(result === false){
+          // validation failed (e.g. missing/invalid field) — let the user retry
+          done = false;
+          track.classList.remove('done');
+          knobX = setX(0);
+        }
+      }, 160);
+    } else {
+      knobX = setX(0);
+    }
+  }
+  knob.addEventListener('pointerdown', onDown);
+  knob.addEventListener('pointermove', onMove);
+  knob.addEventListener('pointerup', onUp);
+  knob.addEventListener('pointercancel', onUp);
+}
+
+let sessions = [];
+let fuelEntries = [];
+let fixedExpenses = [];
+let loan = null; // {principal, rate, tenureMonths, startDate, prepayments:[]}
+let personalTrips = [];
+let quickExpenses = [];
+let maintenanceRecords = [];
+
+const money = n => '₹' + Number(n||0).toLocaleString('en-IN', {maximumFractionDigits:0});
+const round2 = n => Math.round(n*100)/100;
+
+function todayStr(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function nowTimeStr(){
+  const d = new Date();
+  return d.toTimeString().slice(0,5);
+}
+function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ---------- Tab switching ----------
+function switchTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('nav-'+name).classList.add('active');
+  const titles = {work:['Work',"Track today's driving sessions"],
+    fuel:['Fuel',"Log fill-ups, auto mileage & cost/km"],
+    expenses:['Expenses & Loan',"Renewals and loan tracking"],
+    dashboard:['Dashboard',"Income, breakeven & profit"],
+    backup:['Backup',"Cloud backup, export/import & reset"]};
+  document.getElementById('header-title').textContent = titles[name][0];
+  document.getElementById('header-sub').textContent = titles[name][1];
+  if(name==='dashboard') renderDashboard();
+}
+
+// ================= WORK TAB =================
+function renderWork(){
+  const open = sessions.find(s=>s.status==='Open');
+  const container = document.getElementById('work-content');
+  if(!open){
+    container.innerHTML = `
+      <div class="meter">
+        <div class="flag"><span style="width:7px;height:7px;border-radius:50%;background:var(--text-dim);display:inline-block;"></span><span class="label" style="color:var(--text-dim);">For Hire</span></div>
+        <div class="big" style="font-size:22px; color:var(--text-dim);">No Active Session</div>
+      </div>
+      <div class="card">
+        <h2>Start Work</h2>
+        <label>Starting Odometer (km)</label>
+        <input type="number" inputmode="decimal" id="start-odo" placeholder="e.g. 12840">
+        <div class="helptext" id="start-odo-warning" style="min-height:14px;"></div>
+      </div>
+      <div class="sticky-cta">
+        <div id="start-swipe"></div>
+      </div>`;
+    attachOdoContinuity('start-odo', 'start-odo-warning');
+    createSwipeButton(document.getElementById('start-swipe'), 'Slide to Start Work  ➜', startWork);
+  } else {
+    const paused = isPaused(open);
+    const totalBreakMin = getSessionBreakMinutes(open);
+    if(paused){
+      const lastPause = open.pauses[open.pauses.length-1];
+      container.innerHTML = `
+        <div class="meter">
+          <div class="flag"><span class="label" style="color:var(--text-dim);">⏸ On Break</span></div>
+          <div class="big" id="elapsed-display">00:00</div>
+          <div class="meta">break started ${lastPause.startTime} · ${totalBreakMin}m on break so far today</div>
+        </div>
+        <div class="sticky-cta">
+          <div id="resume-swipe"></div>
+        </div>`;
+      createSwipeButton(document.getElementById('resume-swipe'), 'Slide to Resume  ➜', endBreak);
+    } else {
+      container.innerHTML = `
+        <div class="meter">
+          <div class="flag"><span class="pulse"></span><span class="label">Hired · Session Running</span></div>
+          <div class="big" id="elapsed-display">00:00</div>
+          <div class="meta">since ${open.startTime} · start odo ${open.startOdo} km${totalBreakMin>0?` · ${totalBreakMin}m on break so far`:''}</div>
+        </div>
+        <div class="card">
+          <h2>End Session</h2>
+          <label>Ending Odometer (km)</label>
+          <input type="number" inputmode="decimal" id="end-odo" placeholder="must be more than ${open.startOdo}">
+          <div class="row">
+            <div>
+              <label>Cash Revenue (₹)</label>
+              <input type="number" inputmode="decimal" id="end-cash" placeholder="0">
+            </div>
+            <div>
+              <label>Online Revenue (₹)</label>
+              <input type="number" inputmode="decimal" id="end-online" placeholder="0">
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-ghost" onclick="startBreak()">⏸ Take a Break</button>
+        <div class="sticky-cta">
+          <div id="end-swipe"></div>
+        </div>`;
+      createSwipeButton(document.getElementById('end-swipe'), 'Slide to End Session  ➜', endWork);
+    }
+    updateElapsedDisplay();
+  }
+  renderWorkHistory();
+  renderPersonalTrips();
+}
+
+function isPaused(session){
+  return !!(session.pauses && session.pauses.length>0 && session.pauses[session.pauses.length-1].endTime===null);
+}
+function getSessionBreakMinutes(session){
+  if(!session.pauses) return 0;
+  return session.pauses.reduce((sum,p)=>{
+    if(!p.endTime) return sum;
+    const mins = (new Date(session.date+'T'+p.endTime) - new Date(session.date+'T'+p.startTime))/60000;
+    return sum + mins;
+  },0);
+}
+async function startBreak(){
+  const open = sessions.find(s=>s.status==='Open');
+  if(!open || isPaused(open)) return false;
+  const loc = await getGpsLocation();
+  if(!open.pauses) open.pauses = [];
+  open.pauses.push({startTime: nowTimeStr(), startLoc: loc, endTime: null, endLoc: null});
+  save('betafleet_sessions', sessions);
+  renderWork();
+  return true;
+}
+async function endBreak(){
+  const open = sessions.find(s=>s.status==='Open');
+  if(!open || !isPaused(open)) return false;
+  const loc = await getGpsLocation();
+  const currentPause = open.pauses[open.pauses.length-1];
+  currentPause.endTime = nowTimeStr();
+  currentPause.endLoc = loc;
+  save('betafleet_sessions', sessions);
+  renderWork();
+  return true;
+}
+
+function updateElapsedDisplay(){
+  const open = sessions.find(s=>s.status==='Open');
+  const el = document.getElementById('elapsed-display');
+  if(!open || !el) return;
+  const elapsedMin = Math.max(0, Math.round((Date.now() - new Date(open.date+'T'+open.startTime).getTime())/60000));
+  const h = Math.floor(elapsedMin/60), m = elapsedMin%60;
+  el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+async function startWork(){
+  const odo = document.getElementById('start-odo').value;
+  if(!odo){ showAlert('Enter starting odometer'); return false; }
+  const loc = await getGpsLocation();
+  sessions.push({
+    id: uid('WS'), date: todayStr(), startTime: nowTimeStr(), endTime:null,
+    startOdo:Number(odo), endOdo:null, cash:0, online:0, status:'Open',
+    startLoc: loc
+  });
+  save('betafleet_sessions', sessions);
+  renderWork();
+  return true;
+}
+async function endWork(){
+  const open = sessions.find(s=>s.status==='Open');
+  if(!open) return false;
+  const endOdo = Number(document.getElementById('end-odo').value);
+  const cash = Number(document.getElementById('end-cash').value || 0);
+  const online = Number(document.getElementById('end-online').value || 0);
+  if(!endOdo || endOdo <= open.startOdo){ showAlert('Ending odometer must be greater than starting odometer ('+open.startOdo+')'); return false; }
+  if(isPaused(open)){
+    // don't leave a break dangling open forever if they end the session mid-break
+    const lastPause = open.pauses[open.pauses.length-1];
+    lastPause.endTime = nowTimeStr();
+  }
+  const loc = await getGpsLocation();
+  open.endOdo = endOdo; open.cash = cash; open.online = online;
+  open.endTime = nowTimeStr(); open.status = 'Closed';
+  open.endLoc = loc;
+  save('betafleet_sessions', sessions);
+  renderWork();
+  attachOdoContinuity('fuel-odo', 'fuel-odo-warning');
+  attachOdoContinuity('pt-start-odo', 'pt-odo-warning');
+  return true;
+}
+async function deleteSession(id){
+  if(!await showConfirm('Delete this session?')) return;
+  sessions = sessions.filter(s=>s.id!==id);
+  save('betafleet_sessions', sessions);
+  renderWork();
+}
+function renderWorkHistory(){
+  const today = todayStr();
+  const todays = sessions.filter(s=>s.date===today).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+
+  const closedToday = todays.filter(s=>s.status==='Closed');
+  const todayKm = closedToday.reduce((sum,s)=>sum+(s.endOdo-s.startOdo),0);
+  const todayIncome = closedToday.reduce((sum,s)=>sum+s.cash+s.online,0);
+  const kmEl = document.getElementById('today-km');
+  const incomeEl = document.getElementById('today-income');
+  if(kmEl) kmEl.textContent = todayKm + ' km';
+  if(incomeEl) incomeEl.textContent = money(round2(todayIncome));
+
+  const el = document.getElementById('work-history');
+  if(todays.length===0){ el.innerHTML = '<div class="empty">No sessions logged today yet.</div>'; return; }
+  el.innerHTML = todays.map(s=>{
+    const km = s.endOdo!=null ? s.endOdo - s.startOdo : null;
+    const total = s.status==='Closed' ? s.cash + s.online : null;
+    let locLine = '';
+    if(s.startLoc || s.endLoc){
+      const parts = [];
+      if(s.startLoc) parts.push(`<a href="${mapsLink(s.startLoc)}" target="_blank" style="color:var(--led);">📍 Start ${fmtLocTime(s.startLoc.ts)}</a>`);
+      if(s.endLoc) parts.push(`<a href="${mapsLink(s.endLoc)}" target="_blank" style="color:var(--led);">📍 End ${fmtLocTime(s.endLoc.ts)}</a>`);
+      locLine = `<div class="sub" style="margin-top:3px;">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+    }
+    return `<div class="list-row">
+      <div>
+        <div class="main">${s.startTime}${s.endTime?' – '+s.endTime:''} ${s.status==='Open'?'<span class="badge open">Open</span>':''}</div>
+        <div class="sub">${km!=null? km+' km' : s.startOdo+' km start'}</div>
+        ${locLine}
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${total!=null? money(total) : '—'}</div>
+        <button class="del" onclick="deleteSession('${s.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Looks across work sessions, personal trips, and fuel entries to find the highest
+// recorded odometer reading — used to prefill "Start Odometer" so business and
+// personal trips stay continuous with no unexplained gaps.
+function getLastKnownOdometer(){
+  let max = null;
+  const consider = v => { if(v!=null && !isNaN(v)){ max = (max==null) ? v : Math.max(max, v); } };
+  sessions.forEach(s=>{ consider(s.startOdo); consider(s.endOdo); });
+  personalTrips.forEach(p=>{ consider(p.startOdo); consider(p.endOdo); });
+  fuelEntries.forEach(f=>{ consider(f.odo); });
+  return max;
+}
+
+// Prefills an odometer field with the last known reading (only if it's currently
+// empty, so we never overwrite something the person already typed) and wires a
+// live warning if what they enter doesn't line up with that last reading.
+function attachOdoContinuity(inputId, warningId){
+  const input = document.getElementById(inputId);
+  const warnEl = document.getElementById(warningId);
+  if(!input || !warnEl) return;
+  const lastOdo = getLastKnownOdometer();
+  if(!input.value && lastOdo!=null) input.value = lastOdo;
+  const check = ()=>{
+    const val = Number(input.value);
+    const last = getLastKnownOdometer();
+    if(!val || last==null){ warnEl.textContent=''; warnEl.style.color=''; return; }
+    const gap = val - last;
+    if(gap === 0){ warnEl.textContent=''; warnEl.style.color=''; }
+    else if(gap > 0){ warnEl.textContent = `⚠ ${gap} km unaccounted for since your last recorded odometer (${last} km)`; warnEl.style.color='var(--red)'; }
+    else { warnEl.textContent = `⚠ This is ${Math.abs(gap)} km before your last recorded odometer (${last} km) — check for a typo`; warnEl.style.color='var(--red)'; }
+  };
+  input.addEventListener('input', check);
+  check();
+}
+
+function initPersonalTripForm(){
+  document.getElementById('pt-date').value = todayStr();
+  attachOdoContinuity('pt-start-odo', 'pt-odo-warning');
+}
+function savePersonalTrip(){
+  const date = document.getElementById('pt-date').value;
+  const startOdo = Number(document.getElementById('pt-start-odo').value);
+  const endOdo = Number(document.getElementById('pt-end-odo').value);
+  const note = document.getElementById('pt-note').value.trim();
+  if(!date || !startOdo || !endOdo){ showAlert('Enter date, start odometer, and end odometer'); return; }
+  if(endOdo <= startOdo){ showAlert('End odometer must be greater than start odometer'); return; }
+  personalTrips.push({id:uid('PT'), date, startOdo, endOdo, note});
+  save('betafleet_personal', personalTrips);
+  document.getElementById('pt-start-odo').value='';
+  document.getElementById('pt-end-odo').value='';
+  document.getElementById('pt-note').value='';
+  renderPersonalTrips();
+  renderWork(); // refresh Start Work's prefilled odometer to account for this trip
+  attachOdoContinuity('pt-start-odo', 'pt-odo-warning'); // re-prefill for the next trip
+  attachOdoContinuity('fuel-odo', 'fuel-odo-warning'); // fuel's suggestion is now stale too
+}
+async function deletePersonalTrip(id){
+  if(!await showConfirm('Delete this personal trip?')) return;
+  personalTrips = personalTrips.filter(p=>p.id!==id);
+  save('betafleet_personal', personalTrips);
+  renderPersonalTrips();
+}
+function renderPersonalTrips(){
+  const el = document.getElementById('personal-history');
+  if(!el) return;
+  const sorted = [...personalTrips].sort((a,b)=>b.date.localeCompare(a.date) || b.startOdo-a.startOdo);
+  if(sorted.length===0){ el.innerHTML = '<div class="empty">No personal trips logged.</div>'; return; }
+  el.innerHTML = sorted.map(p=>`
+    <div class="list-row">
+      <div>
+        <div class="main">${p.date} <span class="badge" style="background:rgba(136,145,166,0.15); color:var(--text-dim);">Personal</span></div>
+        <div class="sub">${p.startOdo} → ${p.endOdo} km${p.note?' · '+p.note:''}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt" style="color:var(--text-dim);">${p.endOdo-p.startOdo} km</div>
+        <button class="del" onclick="deletePersonalTrip('${p.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function fuelSorted(){
+  return [...fuelEntries].sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
+}
+function fuelWithDerived(){
+  const sorted = fuelSorted();
+  return sorted.map((f,i)=>{
+    const kgFilled = f.amount / f.price;
+    let kmSinceLast = null, mileage = null, costPerKm = null;
+    if(i>0){
+      kmSinceLast = f.odo - sorted[i-1].odo;
+      if(kmSinceLast>0){
+        mileage = kmSinceLast / kgFilled;
+        costPerKm = f.amount / kmSinceLast;
+      }
+    }
+    return {...f, kgFilled, kmSinceLast, mileage, costPerKm};
+  });
+}
+function initFuelForm(){
+  document.getElementById('fuel-date').value = todayStr();
+  document.getElementById('fuel-time').value = nowTimeStr();
+  ['fuel-odo','fuel-price','fuel-amount'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', updateFuelPreview);
+  });
+  attachOdoContinuity('fuel-odo', 'fuel-odo-warning');
+}
+function updateFuelPreview(){
+  const price = Number(document.getElementById('fuel-price').value);
+  const amount = Number(document.getElementById('fuel-amount').value);
+  const el = document.getElementById('fuel-preview');
+  if(price>0 && amount>0){
+    el.textContent = `≈ ${round2(amount/price)} kg filled`;
+  } else { el.textContent = ''; }
+}
+function saveFuelEntry(){
+  const date = document.getElementById('fuel-date').value;
+  const time = document.getElementById('fuel-time').value;
+  const odo = Number(document.getElementById('fuel-odo').value);
+  const price = Number(document.getElementById('fuel-price').value);
+  const amount = Number(document.getElementById('fuel-amount').value);
+  if(!date||!time||!odo||!price||!amount){ showAlert('Fill in all fields'); return; }
+  fuelEntries.push({id:uid('FE'), date, time, odo, price, amount});
+  save('betafleet_fuel', fuelEntries);
+  document.getElementById('fuel-odo').value='';
+  document.getElementById('fuel-price').value='';
+  document.getElementById('fuel-amount').value='';
+  document.getElementById('fuel-preview').textContent='';
+  renderFuelHistory();
+  attachOdoContinuity('fuel-odo', 'fuel-odo-warning'); // re-prefill for the next fill-up
+  attachOdoContinuity('pt-start-odo', 'pt-odo-warning'); // personal trip's suggestion is now stale too
+}
+async function deleteFuel(id){
+  if(!await showConfirm('Delete this fuel entry?')) return;
+  fuelEntries = fuelEntries.filter(f=>f.id!==id);
+  save('betafleet_fuel', fuelEntries);
+  renderFuelHistory();
+}
+function renderFuelHistory(){
+  const withDerived = fuelWithDerived();
+  const validMileages = withDerived.filter(f=>f.mileage!=null).map(f=>f.mileage);
+  const avgMileage = validMileages.length ? validMileages.reduce((s,m)=>s+m,0)/validMileages.length : null;
+  const el = document.getElementById('fuel-history');
+  if(withDerived.length===0){ el.innerHTML = '<div class="empty">No fuel entries yet.</div>'; return; }
+  el.innerHTML = [...withDerived].reverse().map(f=>{
+    let mileageHtml = '';
+    if(f.mileage!=null){
+      let color = 'var(--text-dim)';
+      if(avgMileage!=null){
+        if(f.mileage < avgMileage*0.85) color = 'var(--red)';       // notably worse than average
+        else if(f.mileage > avgMileage*1.1) color = 'var(--green)'; // notably better than average
+      }
+      mileageHtml = ` · <span style="color:${color}; font-weight:600;">${round2(f.mileage)} km/kg</span>`;
+    }
+    return `<div class="list-row">
+      <div>
+        <div class="main">${f.date} ${f.time}</div>
+        <div class="sub">${f.odo} km · ${round2(f.kgFilled)} kg @ ₹${f.price}${mileageHtml}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${money(f.amount)}</div>
+        <button class="del" onclick="deleteFuel('${f.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ================= EXPENSES & LOAN TAB =================
+function switchExpSeg(seg){
+  document.getElementById('seg-fixed').classList.toggle('active', seg==='fixed');
+  document.getElementById('seg-loan').classList.toggle('active', seg==='loan');
+  document.getElementById('seg-variable').classList.toggle('active', seg==='variable');
+  document.getElementById('exp-fixed-panel').style.display = seg==='fixed'?'block':'none';
+  document.getElementById('exp-loan-panel').style.display = seg==='loan'?'block':'none';
+  document.getElementById('exp-variable-panel').style.display = seg==='variable'?'block':'none';
+}
+document.getElementById('mt-type').addEventListener('change', e=>{
+  document.getElementById('mt-type-other').style.display = e.target.value==='__other' ? 'block' : 'none';
+});
+document.getElementById('fx-type').addEventListener('change', e=>{
+  document.getElementById('fx-type-other').style.display = e.target.value==='__other' ? 'block' : 'none';
+});
+function fxDailyCost(fx){
+  const issue = new Date(fx.issue), expiry = new Date(fx.expiry);
+  const days = Math.max(1, Math.round((expiry-issue)/(1000*60*60*24)));
+  return fx.cost / days;
+}
+function saveFixedExpense(){
+  const typeSel = document.getElementById('fx-type').value;
+  const type = typeSel==='__other' ? (document.getElementById('fx-type-other').value || 'Other') : typeSel;
+  const issue = document.getElementById('fx-issue').value;
+  const expiry = document.getElementById('fx-expiry').value;
+  const cost = Number(document.getElementById('fx-cost').value);
+  if(!issue||!expiry||!cost){ showAlert('Fill in all fields'); return; }
+  fixedExpenses.push({id:uid('FX'), type, issue, expiry, cost});
+  save('betafleet_expenses', fixedExpenses);
+  document.getElementById('fx-cost').value='';
+  renderFixedExpenses();
+}
+async function deleteFx(id){
+  if(!await showConfirm('Delete this renewal?')) return;
+  fixedExpenses = fixedExpenses.filter(f=>f.id!==id);
+  save('betafleet_expenses', fixedExpenses);
+  renderFixedExpenses();
+}
+function getUrgentRenewals(){
+  const today = new Date();
+  return fixedExpenses.map(fx=>{
+    const expiry = new Date(fx.expiry);
+    const daysLeft = Math.round((expiry-today)/(1000*60*60*24));
+    return {...fx, daysLeft};
+  }).filter(fx=>fx.daysLeft<=30).sort((a,b)=>a.daysLeft-b.daysLeft);
+}
+function updateRenewalNavBadge(){
+  const urgent = getUrgentRenewals().length + getUrgentMaintenance().length;
+  const navBtn = document.getElementById('nav-expenses');
+  if(!navBtn) return;
+  let dot = navBtn.querySelector('.nav-alert-dot');
+  if(urgent > 0){
+    if(!dot){
+      dot = document.createElement('span');
+      dot.className = 'nav-alert-dot';
+      dot.style.cssText = 'position:absolute; top:6px; right:22%; width:8px; height:8px; border-radius:50%; background:var(--red);';
+      navBtn.style.position = 'relative';
+      navBtn.appendChild(dot);
+    }
+  } else if(dot){
+    dot.remove();
+  }
+}
+function renderFixedExpenses(){
+  const el = document.getElementById('fx-list');
+  if(fixedExpenses.length===0){ el.innerHTML = '<div class="empty">No renewals added yet.</div>'; updateRenewalNavBadge(); return; }
+  const today = new Date();
+  let rows = fixedExpenses.map(fx=>{
+    const daily = fxDailyCost(fx);
+    const expiry = new Date(fx.expiry);
+    const daysLeft = Math.round((expiry-today)/(1000*60*60*24));
+    let badge = '<span class="badge ok">Active</span>';
+    if(daysLeft<0) badge = '<span class="badge soon">Expired</span>';
+    else if(daysLeft<=30) badge = '<span class="badge soon">Renew Soon</span>';
+    return `<div class="list-row">
+      <div>
+        <div class="main">${fx.type} ${badge}</div>
+        <div class="sub">expires ${fx.expiry} · ${money(round2(daily))}/day</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${money(fx.cost)}</div>
+        <button class="del" onclick="deleteFx('${fx.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  const total = fixedExpenses.reduce((s,fx)=>s+fxDailyCost(fx),0);
+  rows += `<div class="list-row" style="border-top:1px solid var(--divider); margin-top:6px; padding-top:12px;">
+    <div class="main" style="font-weight:600;">Total / Day</div>
+    <div class="amt" style="color:var(--amber);">${money(round2(total))}</div>
+  </div>`;
+  el.innerHTML = rows;
+  updateRenewalNavBadge();
+}
+function totalDailyFixedCost(){
+  return fixedExpenses.reduce((s,fx)=>s+fxDailyCost(fx),0);
+}
+
+// ================= QUICK EXPENSES =================
+document.getElementById('qe-category').addEventListener('change', e=>{
+  document.getElementById('qe-category-other').style.display = e.target.value==='__other' ? 'block' : 'none';
+});
+// One-hand fast path from the Work tab: tap category icon, type amount, done.
+// "Other" logs simply as "Other" — use the full form in Expenses tab if you want
+// a custom category name instead.
+function saveQuickExpense(){
+  const categorySel = document.getElementById('qe-category').value;
+  const category = categorySel==='__other' ? (document.getElementById('qe-category-other').value || 'Other') : categorySel;
+  const amount = Number(document.getElementById('qe-amount').value);
+  if(!amount){ showAlert('Enter an amount'); return; }
+  quickExpenses.push({id:uid('QE'), date:todayStr(), time:nowTimeStr(), category, amount});
+  save('betafleet_quickexpenses', quickExpenses);
+  document.getElementById('qe-amount').value='';
+  document.getElementById('qe-category-other').value='';
+  renderQuickExpenseHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+async function deleteQuickExpense(id){
+  if(!await showConfirm('Delete this expense?')) return;
+  quickExpenses = quickExpenses.filter(q=>q.id!==id);
+  save('betafleet_quickexpenses', quickExpenses);
+  renderQuickExpenseHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+function qeCategoryIcon(category){
+  const map = {Food:'🍔', Toll:'🛣️', Parking:'🅿️'};
+  return map[category] || '💳';
+}
+function qeCategoryColor(category){
+  const map = {Food:'#F2B94D', Toll:'#5AC8FA', Parking:'#9B8CFF'};
+  return map[category] || '#8891A6';
+}
+function renderQuickExpenseHistory(){
+  const el = document.getElementById('quick-expense-history');
+  if(!el) return;
+  const today = todayStr();
+  const todays = quickExpenses.filter(q=>q.date===today).sort((a,b)=>b.time.localeCompare(a.time));
+  if(todays.length===0){ el.innerHTML = '<div class="empty">No quick expenses logged today.</div>'; return; }
+  el.innerHTML = todays.map(q=>`
+    <div class="list-row">
+      <div><div class="main"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${qeCategoryColor(q.category)}; margin-right:6px;"></span>${qeCategoryIcon(q.category)} ${q.category}</div><div class="sub">${q.time}</div></div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt" style="color:var(--red);">-${money(q.amount)}</div>
+        <button class="del" onclick="deleteQuickExpense('${q.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+// Sums quick expenses + maintenance costs whose date falls within [start,end] (inclusive).
+// This is the "variable costs" figure that gets subtracted from profit alongside fuel.
+function sumVariableExpensesInRange(start, end){
+  const inRange = dateStr => { const d = new Date(dateStr); return d>=start && d<=end; };
+  const qe = quickExpenses.filter(q=>inRange(q.date)).reduce((s,q)=>s+q.amount,0);
+  const mt = maintenanceRecords.filter(m=>inRange(m.serviceDate)).reduce((s,m)=>s+m.cost,0);
+  return qe + mt;
+}
+
+// ================= MAINTENANCE & SERVICING =================
+function initMaintenanceForm(){
+  document.getElementById('mt-date').value = todayStr();
+  const lastOdo = getLastKnownOdometer();
+  if(lastOdo!=null) document.getElementById('mt-odo').value = lastOdo;
+}
+function saveMaintenance(){
+  const typeSel = document.getElementById('mt-type').value;
+  const serviceType = typeSel==='__other' ? (document.getElementById('mt-type-other').value || 'Other') : typeSel;
+  const serviceDate = document.getElementById('mt-date').value;
+  const odometerAtService = Number(document.getElementById('mt-odo').value);
+  const cost = Number(document.getElementById('mt-cost').value);
+  const nextDueOdoVal = document.getElementById('mt-next-odo').value;
+  const nextDueDateVal = document.getElementById('mt-next-date').value;
+  if(!serviceDate || !odometerAtService || !cost){ showAlert('Fill in service date, odometer, and cost'); return; }
+  maintenanceRecords.push({
+    id: uid('MT'), serviceType, serviceDate, odometerAtService, cost,
+    nextDueOdometer: nextDueOdoVal ? Number(nextDueOdoVal) : null,
+    nextDueDate: nextDueDateVal || null
+  });
+  save('betafleet_maintenance', maintenanceRecords);
+  document.getElementById('mt-cost').value='';
+  document.getElementById('mt-next-odo').value='';
+  document.getElementById('mt-next-date').value='';
+  renderMaintenanceHistory();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+async function deleteMaintenance(id){
+  if(!await showConfirm('Delete this service record?')) return;
+  maintenanceRecords = maintenanceRecords.filter(m=>m.id!==id);
+  save('betafleet_maintenance', maintenanceRecords);
+  renderMaintenanceHistory();
+}
+// Returns records that are due soon/overdue by EITHER km or date criterion (whichever
+// comes first), mirroring how real service intervals work.
+function getUrgentMaintenance(){
+  const currentOdo = getLastKnownOdometer();
+  const today = new Date();
+  return maintenanceRecords.map(m=>{
+    let kmLeft = null, daysLeft = null;
+    if(m.nextDueOdometer!=null && currentOdo!=null) kmLeft = m.nextDueOdometer - currentOdo;
+    if(m.nextDueDate) daysLeft = Math.round((new Date(m.nextDueDate)-today)/(1000*60*60*24));
+    return {...m, kmLeft, daysLeft};
+  }).filter(m=>{
+    const kmUrgent = m.kmLeft!=null && m.kmLeft<=500;
+    const dateUrgent = m.daysLeft!=null && m.daysLeft<=30;
+    return kmUrgent || dateUrgent;
+  }).sort((a,b)=>{
+    const aMin = Math.min(a.kmLeft??Infinity, (a.daysLeft??Infinity)*1000); // rough combined sort
+    const bMin = Math.min(b.kmLeft??Infinity, (b.daysLeft??Infinity)*1000);
+    return aMin-bMin;
+  });
+}
+function renderMaintenanceHistory(){
+  const el = document.getElementById('maintenance-history');
+  if(!el) return;
+  if(maintenanceRecords.length===0){ el.innerHTML = '<div class="empty">No service records yet.</div>'; updateRenewalNavBadge(); return; }
+  const sorted = [...maintenanceRecords].sort((a,b)=>b.serviceDate.localeCompare(a.serviceDate));
+  el.innerHTML = sorted.map(m=>{
+    let dueText = '';
+    if(m.nextDueOdometer!=null) dueText += `next @ ${m.nextDueOdometer} km`;
+    if(m.nextDueDate) dueText += (dueText?' or ':'') + `by ${m.nextDueDate}`;
+    return `<div class="list-row">
+      <div>
+        <div class="main">${m.serviceType}</div>
+        <div class="sub">${m.serviceDate} · ${m.odometerAtService} km${dueText?' · '+dueText:''}</div>
+      </div>
+      <div style="display:flex; align-items:center;">
+        <div class="amt">${money(m.cost)}</div>
+        <button class="del" onclick="deleteMaintenance('${m.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateRenewalNavBadge();
+}
+
+function emiOf(l){
+  const r = l.rate/1200, n = l.tenureMonths;
+  return l.principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+}
+function loanSchedule(l){
+  const r = l.rate/1200;
+  const emi = emiOf(l);
+  let balance = l.principal;
+  const start = new Date(l.startDate);
+  const schedule = [];
+  for(let m=0;m<l.tenureMonths;m++){
+    const monthDate = new Date(start.getFullYear(), start.getMonth()+m, start.getDate());
+    const interest = balance*r;
+    const principalPortion = Math.min(emi-interest, balance);
+    const prepay = (l.prepayments||[]).filter(p=>{
+      const pd = new Date(p.date);
+      return pd.getFullYear()===monthDate.getFullYear() && pd.getMonth()===monthDate.getMonth();
+    }).reduce((s,p)=>s+Number(p.amount),0);
+    const closing = Math.max(balance - principalPortion - prepay, 0);
+    schedule.push({month:m+1, date:monthDate, opening:balance, interest, principalPortion, prepay, closing});
+    balance = closing;
+  }
+  return {emi, schedule};
+}
+function loanStatusAsOf(l, asOfDate){
+  const {emi, schedule} = loanSchedule(l);
+  const past = schedule.filter(row=>row.date<=asOfDate);
+  const remainingBalance = past.length ? past[past.length-1].closing : l.principal;
+  const monthStart = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 1);
+  const remainingTenure = schedule.filter(row=>row.date>=monthStart && row.closing>0).length;
+  return {emi, remainingBalance, remainingTenure};
+}
+function saveLoan(){
+  const principal = Number(document.getElementById('ln-principal').value);
+  const rate = Number(document.getElementById('ln-rate').value);
+  const tenureMonths = Number(document.getElementById('ln-tenure').value);
+  const startDate = document.getElementById('ln-start').value;
+  if(!principal||!rate||!tenureMonths||!startDate){ showAlert('Fill in all loan fields'); return; }
+  loan = {principal, rate, tenureMonths, startDate, prepayments: loan?loan.prepayments:[]};
+  save('betafleet_loan', loan);
+  renderLoan();
+  const preview = document.getElementById('ln-emi-preview');
+  const original = preview.textContent;
+  preview.textContent = '✓ Saved — ' + original;
+  vibrate(15);
+}
+async function deleteLoan(){
+  if(!loan) return;
+  if(!await showConfirm('Delete the entire loan record? This also removes every prepayment logged against it.')) return;
+  loan = null;
+  try{ localStorage.removeItem('betafleet_loan'); }catch(e){}
+  document.getElementById('ln-principal').value = '';
+  document.getElementById('ln-rate').value = '';
+  document.getElementById('ln-tenure').value = '';
+  document.getElementById('ln-start').value = '';
+  renderLoan();
+  if(document.getElementById('tab-dashboard').classList.contains('active')) renderDashboard();
+}
+function savePrepayment(){
+  if(!loan){ showAlert('Enter loan terms first'); return; }
+  const date = document.getElementById('pp-date').value;
+  const amount = Number(document.getElementById('pp-amount').value);
+  if(!date||!amount){ showAlert('Fill in date and amount'); return; }
+  loan.prepayments.push({id:uid('PP'), date, amount});
+  save('betafleet_loan', loan);
+  document.getElementById('pp-amount').value='';
+  renderLoan();
+}
+async function deletePrepayment(id){
+  if(!await showConfirm('Remove this prepayment?')) return;
+  loan.prepayments = loan.prepayments.filter(p=>p.id!==id);
+  save('betafleet_loan', loan);
+  renderLoan();
+}
+function renderLoan(){
+  const deleteBtn = document.getElementById('ln-delete-btn');
+  if(loan){
+    deleteBtn.style.display = 'block';
+    document.getElementById('ln-principal').value = loan.principal;
+    document.getElementById('ln-rate').value = loan.rate;
+    document.getElementById('ln-tenure').value = loan.tenureMonths;
+    document.getElementById('ln-start').value = loan.startDate;
+    const emi = emiOf(loan);
+    document.getElementById('ln-emi-preview').textContent = `Calculated EMI: ${money(round2(emi))} / month`;
+    const status = loanStatusAsOf(loan, new Date());
+    document.getElementById('loan-status').innerHTML = `
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Monthly EMI</div><div class="v neu">${money(round2(status.emi))}</div></div>
+        <div class="stat"><div class="k">Remaining Balance</div><div class="v">${money(round2(status.remainingBalance))}</div></div>
+        <div class="stat"><div class="k">Tenure Left</div><div class="v">${status.remainingTenure} mo</div></div>
+        <div class="stat"><div class="k">Original Tenure</div><div class="v">${loan.tenureMonths} mo</div></div>
+      </div>`;
+    const pps = loan.prepayments||[];
+    document.getElementById('pp-list').innerHTML = pps.length ? pps.map(p=>`
+      <div class="list-row">
+        <div class="main">${p.date}</div>
+        <div style="display:flex; align-items:center;">
+          <div class="amt">${money(p.amount)}</div>
+          <button class="del" onclick="deletePrepayment('${p.id}')">✕</button>
+        </div>
+      </div>`).join('') : '<div class="empty">No prepayments logged yet.</div>';
+  } else {
+    deleteBtn.style.display = 'none';
+    document.getElementById('ln-emi-preview').textContent = '';
+    document.getElementById('loan-status').innerHTML = '<div class="empty">Enter loan terms above.</div>';
+    document.getElementById('pp-list').innerHTML = '<div class="empty">No prepayments logged yet.</div>';
+  }
+}
+function dailyLoanCost(){
+  return loan ? emiOf(loan)/30 : 0;
+}
+
+// ================= DASHBOARD =================
+let dashRange = 'day';
+function switchDashRange(r){
+  dashRange = r;
+  ['day','week','month'].forEach(x=>document.getElementById('seg-'+x).classList.toggle('active', x===r));
+  const labels = {day:'Today', week:'Last 7 Days', month:'Last 30 Days'};
+  document.getElementById('profit-hero-range').textContent = labels[r];
+  renderDashboard();
+}
+function rangeWindow(range){
+  const end = new Date(); end.setHours(23,59,59,999);
+  let start = new Date();
+  if(range==='day'){ start.setHours(0,0,0,0); }
+  else if(range==='week'){ start.setDate(start.getDate()-6); start.setHours(0,0,0,0); }
+  else { start.setDate(start.getDate()-29); start.setHours(0,0,0,0); }
+  const days = range==='day' ? 1 : (range==='week' ? 7 : 30);
+  return {start, end, days};
+}
+function renderDashboard(){
+  renderSnapshotInfo();
+  renderExportReminder();
+
+  const urgentRenewals = getUrgentRenewals();
+  const urgentMaint = getUrgentMaintenance();
+  const bannerEl = document.getElementById('renewal-banner');
+  if(bannerEl){
+    if(urgentRenewals.length===0 && urgentMaint.length===0){ bannerEl.innerHTML=''; }
+    else {
+      const renewalLines = urgentRenewals.map(fx=>{
+        const label = fx.daysLeft<0 ? `expired ${Math.abs(fx.daysLeft)} day${Math.abs(fx.daysLeft)===1?'':'s'} ago` : `expires in ${fx.daysLeft} day${fx.daysLeft===1?'':'s'}`;
+        return `${fx.type} — ${label}`;
+      });
+      const maintLines = urgentMaint.map(m=>{
+        const parts = [];
+        if(m.kmLeft!=null) parts.push(m.kmLeft<0 ? `${Math.abs(Math.round(m.kmLeft))} km overdue` : `${Math.round(m.kmLeft)} km left`);
+        if(m.daysLeft!=null) parts.push(m.daysLeft<0 ? `${Math.abs(m.daysLeft)}d overdue` : `${m.daysLeft}d left`);
+        return `${m.serviceType} — ${parts.join(' or ')}`;
+      });
+      const allLines = [...renewalLines, ...maintLines].join('<br>');
+      const count = urgentRenewals.length + urgentMaint.length;
+      bannerEl.innerHTML = `<div class="renewal-banner"><div class="title">⚠ ${count} item${count>1?'s':''} needing attention</div>${allLines}</div>`;
+    }
+  }
+
+  const {start, end, days} = rangeWindow(dashRange);
+  const inRange = d => { const dt = new Date(d); return dt>=start && dt<=end; };
+
+  const closed = sessions.filter(s=>s.status==='Closed' && inRange(s.date));
+  const income = closed.reduce((s,x)=>s+x.cash+x.online,0);
+  const km = closed.reduce((s,x)=>s+(x.endOdo-x.startOdo),0);
+
+  const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
+  const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
+  const avgMileage = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.mileage,0)/derivedFuel.length : null;
+
+  const fixedDaily = totalDailyFixedCost();
+  const loanDaily = dailyLoanCost();
+  const fuelCost = avgCostPerKm * km;
+  const quickExpTotal = quickExpenses.filter(e=>inRange(e.date)).reduce((s,e)=>s+e.amount,0);
+  const maintExpTotal = maintenanceRecords.filter(m=>inRange(m.serviceDate)).reduce((s,m)=>s+m.cost,0);
+  const breakeven = (fixedDaily + loanDaily) * days + fuelCost + quickExpTotal + maintExpTotal;
+  const profit = income - breakeven;
+  const qeEl = document.getElementById('dash-quickexp');
+  if(qeEl) qeEl.textContent = money(round2(quickExpTotal));
+  const mtEl = document.getElementById('dash-maintexp');
+  if(mtEl) mtEl.textContent = money(round2(maintExpTotal));
+
+  document.getElementById('dash-income').textContent = money(round2(income));
+  document.getElementById('dash-breakeven').textContent = money(round2(breakeven));
+  const profitEl = document.getElementById('dash-profit');
+  profitEl.textContent = money(round2(profit));
+  profitEl.className = 'v ' + (profit>=0 ? 'pos' : 'neg');
+  document.getElementById('profit-hero').className = 'hero-profit ' + (profit>=0 ? 'pos' : 'neg');
+  document.getElementById('dash-km').textContent = km + ' km';
+
+  const hours = closed.reduce((s,x)=>{
+    const gross = ((new Date(x.date+'T'+x.endTime))-(new Date(x.date+'T'+x.startTime)))/3600000;
+    return s + Math.max(0, gross - getSessionBreakMinutes(x)/60);
+  },0);
+  const revenueAfterFuel = income - fuelCost;
+  const revFuelEl = document.getElementById('dash-revfuel');
+  const revHrEl = document.getElementById('dash-revhr');
+  if(revFuelEl) revFuelEl.textContent = money(round2(revenueAfterFuel));
+  if(revHrEl) revHrEl.textContent = hours>0 ? money(round2(revenueAfterFuel/hours))+'/hr' : '—';
+
+  document.getElementById('dash-mileage').textContent = avgMileage!=null ? round2(avgMileage)+' km/kg' : '—';
+  document.getElementById('dash-costperkm').textContent = derivedFuel.length ? '₹'+round2(avgCostPerKm)+'/km' : '—';
+
+  if(loan){
+    const status = loanStatusAsOf(loan, new Date());
+    document.getElementById('dash-loan-balance').textContent = money(round2(status.remainingBalance));
+    document.getElementById('dash-loan-tenure').textContent = status.remainingTenure + ' / ' + loan.tenureMonths + ' mo';
+  } else {
+    document.getElementById('dash-loan-balance').textContent = '—';
+    document.getElementById('dash-loan-tenure').textContent = '—';
+  }
+
+  renderWeeklyStatement();
+}
+
+// ================= WEEKLY STATEMENT =================
+// Groups closed work sessions into Sun–Sat weeks and shows profit + total online
+// (on-duty) hours per week — a compact list instead of a full calendar.
+function getWeekStart(dateStr){
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - d.getDay()); // roll back to that week's Sunday
+  return d;
+}
+function weekKeyOf(date){
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+// ================= SESSIONS WEEK VIEW (tap "Today's Sessions ›" to open) =================
+let currentSessionsWeekKey = null;
+function openSessionsWeek(){
+  currentSessionsWeekKey = weekKeyOf(getWeekStart(todayStr()));
+  renderSessionsWeek();
+  document.getElementById('session-week-overlay').style.display = 'block';
+}
+function closeSessionsWeek(){
+  document.getElementById('session-week-overlay').style.display = 'none';
+}
+function sessionsWeekNav(delta){
+  const d = new Date(currentSessionsWeekKey);
+  d.setDate(d.getDate() + delta*7);
+  currentSessionsWeekKey = weekKeyOf(d);
+  renderSessionsWeek();
+}
+function renderSessionsWeek(){
+  const weekStart = new Date(currentSessionsWeekKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('session-week-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  const weekKeys = [];
+  for(let i=0;i<7;i++){ const d=new Date(weekStart); d.setDate(d.getDate()+i); weekKeys.push(weekKeyOf(d)); }
+  const weekSessions = sessions.filter(s=>weekKeys.includes(s.date)).sort((a,b)=> a.date===b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date));
+
+  const weekIncome = weekSessions.filter(s=>s.status==='Closed').reduce((s,x)=>s+x.cash+x.online,0);
+  const weekKm = weekSessions.filter(s=>s.status==='Closed').reduce((s,x)=>s+(x.endOdo-x.startOdo),0);
+  document.getElementById('session-week-income').textContent = money(round2(weekIncome));
+  document.getElementById('session-week-km').textContent = weekKm+' km';
+
+  const el = document.getElementById('session-week-entries');
+  if(weekSessions.length===0){ el.innerHTML = '<div class="empty">No sessions logged this week.</div>'; return; }
+  el.innerHTML = weekSessions.map(s=>{
+    const km = s.endOdo!=null ? s.endOdo-s.startOdo : null;
+    const total = s.status==='Closed' ? s.cash+s.online : null;
+    const dayLabel = new Date(s.date).toLocaleDateString('en-IN',{weekday:'short', day:'numeric', month:'short'});
+    return `<div class="list-row">
+      <div>
+        <div class="main">${dayLabel} · ${s.startTime}${s.endTime?' – '+s.endTime:''} ${s.status==='Open'?'<span class="badge open">Open</span>':''}</div>
+        <div class="sub">${km!=null? km+' km' : s.startOdo+' km start'}</div>
+      </div>
+      <div class="amt">${total!=null? money(total) : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ================= FUEL WEEK VIEW (tap "History ›" to open) =================
+let currentFuelWeekKey = null;
+function openFuelWeek(){
+  currentFuelWeekKey = weekKeyOf(getWeekStart(todayStr()));
+  renderFuelWeek();
+  document.getElementById('fuel-week-overlay').style.display = 'block';
+}
+function closeFuelWeek(){
+  document.getElementById('fuel-week-overlay').style.display = 'none';
+}
+function fuelWeekNav(delta){
+  const d = new Date(currentFuelWeekKey);
+  d.setDate(d.getDate() + delta*7);
+  currentFuelWeekKey = weekKeyOf(d);
+  renderFuelWeek();
+}
+function renderFuelWeek(){
+  const weekStart = new Date(currentFuelWeekKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('fuel-week-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+
+  const weekKeys = [];
+  for(let i=0;i<7;i++){ const d=new Date(weekStart); d.setDate(d.getDate()+i); weekKeys.push(weekKeyOf(d)); }
+  const allDerived = fuelWithDerived();
+  const validMileages = allDerived.filter(f=>f.mileage!=null).map(f=>f.mileage);
+  const avgMileage = validMileages.length ? validMileages.reduce((s,m)=>s+m,0)/validMileages.length : null;
+  const weekEntries = allDerived.filter(f=>weekKeys.includes(f.date));
+
+  const el = document.getElementById('fuel-week-entries');
+  if(weekEntries.length===0){ el.innerHTML = '<div class="empty">No fuel entries logged this week.</div>'; return; }
+  el.innerHTML = weekEntries.map(f=>{
+    let mileageHtml = '';
+    if(f.mileage!=null){
+      let color = 'var(--text-dim)';
+      if(avgMileage!=null){
+        if(f.mileage < avgMileage*0.85) color = 'var(--red)';
+        else if(f.mileage > avgMileage*1.1) color = 'var(--green)';
+      }
+      mileageHtml = ` · <span style="color:${color}; font-weight:600;">${round2(f.mileage)} km/kg</span>`;
+    }
+    const dayLabel = new Date(f.date).toLocaleDateString('en-IN',{weekday:'short', day:'numeric', month:'short'});
+    return `<div class="list-row">
+      <div>
+        <div class="main">${dayLabel} ${f.time}</div>
+        <div class="sub">${f.odo} km · ${round2(f.kgFilled)} kg @ ₹${f.price}${mileageHtml}</div>
+      </div>
+      <div class="amt">${money(f.amount)}</div>
+    </div>`;
+  }).join('');
+}
+
+function computeWeeklyStats(){
+  const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
+  const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
+  const fixedDaily = totalDailyFixedCost();
+  const loanDaily = dailyLoanCost();
+  const weeks = {};
+  const ensure = key => { if(!weeks[key]) weeks[key] = {weekStart:new Date(key), income:0, km:0, hours:0, quickExp:0, maintExp:0}; };
+  sessions.filter(s=>s.status==='Closed').forEach(s=>{
+    const weekStart = getWeekStart(s.date);
+    const key = weekStart.toISOString().slice(0,10);
+    ensure(key);
+    weeks[key].income += s.cash + s.online;
+    weeks[key].km += (s.endOdo - s.startOdo);
+    const grossHours = ((new Date(s.date+'T'+s.endTime)) - (new Date(s.date+'T'+s.startTime))) / 3600000;
+    const breakHours = getSessionBreakMinutes(s) / 60;
+    weeks[key].hours += Math.max(0, grossHours - breakHours);
+  });
+  quickExpenses.forEach(e=>{
+    const key = getWeekStart(e.date).toISOString().slice(0,10);
+    ensure(key);
+    weeks[key].quickExp += e.amount;
+  });
+  maintenanceRecords.forEach(m=>{
+    const key = getWeekStart(m.serviceDate).toISOString().slice(0,10);
+    ensure(key);
+    weeks[key].maintExp += m.cost;
+  });
+  Object.values(weeks).forEach(w=>{
+    const fuelCost = avgCostPerKm * w.km;
+    w.breakeven = fixedDaily*7 + loanDaily*7 + fuelCost + w.quickExp + w.maintExp;
+    w.profit = w.income - w.breakeven;
+  });
+  return weeks;
+}
+function renderWeeklyStatement(){
+  const el = document.getElementById('weekly-statement');
+  if(!el) return;
+  const weeks = computeWeeklyStats();
+  const keys = Object.keys(weeks).sort().reverse();
+  if(keys.length===0){ el.innerHTML = '<div class="empty">No sessions logged yet.</div>'; return; }
+  el.innerHTML = keys.map(key=>{
+    const w = weeks[key];
+    const weekEnd = new Date(w.weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+    const label = `${w.weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short'})}`;
+    const cls = w.profit>=0 ? 'pos' : 'neg';
+    return `<div class="list-row" onclick="openWeekDetail('${key}')" style="cursor:pointer;">
+      <div>
+        <div class="main">${label} ›</div>
+        <div class="sub">${round2(w.hours)}h online · ${round2(w.km)} km</div>
+      </div>
+      <div class="amt cal-list-amt ${cls}">${w.profit>=0?'+':''}${money(round2(w.profit))}</div>
+    </div>`;
+  }).join('');
+}
+
+// ================= WEEK DETAIL (day-by-day breakdown, tap a week to open) =================
+let currentWeekDetailKey = null;
+
+function computeDayStats(dateStr){
+  const derivedFuel = fuelWithDerived().filter(f=>f.costPerKm!=null);
+  const avgCostPerKm = derivedFuel.length ? derivedFuel.reduce((s,f)=>s+f.costPerKm,0)/derivedFuel.length : 0;
+  const fixedDaily = totalDailyFixedCost();
+  const loanDaily = dailyLoanCost();
+  const daySessions = sessions.filter(s=>s.status==='Closed' && s.date===dateStr);
+  const income = daySessions.reduce((s,x)=>s+x.cash+x.online,0);
+  const km = daySessions.reduce((s,x)=>s+(x.endOdo-x.startOdo),0);
+  const hours = daySessions.reduce((s,x)=>{
+    const gross = ((new Date(x.date+'T'+x.endTime))-(new Date(x.date+'T'+x.startTime)))/3600000;
+    return s + Math.max(0, gross - getSessionBreakMinutes(x)/60);
+  },0);
+  const quickExp = quickExpenses.filter(q=>q.date===dateStr).reduce((s,q)=>s+q.amount,0);
+  const maintExp = maintenanceRecords.filter(m=>m.serviceDate===dateStr).reduce((s,m)=>s+m.cost,0);
+  const fuelCost = avgCostPerKm * km;
+  const breakeven = fixedDaily + loanDaily + fuelCost + quickExp + maintExp;
+  const profit = income - breakeven;
+  return {income, km, hours, quickExp, maintExp, breakeven, profit, hasSessions: daySessions.length>0};
+}
+
+function openWeekDetail(key){
+  currentWeekDetailKey = key;
+  renderWeekDetail();
+  document.getElementById('week-detail-overlay').style.display = 'block';
+}
+function closeWeekDetail(){
+  document.getElementById('week-detail-overlay').style.display = 'none';
+}
+function weekDetailNav(delta){
+  const d = new Date(currentWeekDetailKey);
+  d.setDate(d.getDate() + delta*7);
+  currentWeekDetailKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  renderWeekDetail();
+}
+function renderWeekDetail(){
+  const weekStart = new Date(currentWeekDetailKey);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+  document.getElementById('week-detail-title').textContent =
+    `${weekStart.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}`;
+  document.getElementById('week-detail-subtitle').textContent = 'Tap ‹ › to browse other weeks';
+
+  let weekIncome=0, weekKm=0, weekHours=0, weekBreakeven=0, weekProfit=0;
+  const dayRows = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(weekStart); d.setDate(d.getDate()+i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const stat = computeDayStats(dateStr);
+    weekIncome += stat.income; weekKm += stat.km; weekHours += stat.hours;
+    weekBreakeven += stat.breakeven; weekProfit += stat.profit;
+    dayRows.push({dateStr, dayName: d.toLocaleDateString('en-IN',{weekday:'short'}), dateLabel: d.toLocaleDateString('en-IN',{day:'numeric',month:'short'}), ...stat});
+  }
+
+  document.getElementById('week-detail-income').textContent = money(round2(weekIncome));
+  document.getElementById('week-detail-breakeven').textContent = money(round2(weekBreakeven));
+  document.getElementById('week-detail-hours').textContent = round2(weekHours)+'h';
+  document.getElementById('week-detail-km').textContent = weekKm+' km';
+  document.getElementById('week-detail-profit').textContent = money(round2(weekProfit));
+  document.getElementById('week-detail-hero').className = 'hero-profit ' + (weekProfit>=0?'pos':'neg');
+
+  document.getElementById('week-detail-days').innerHTML = dayRows.map(r=>{
+    if(!r.hasSessions){
+      return `<div class="list-row"><div><div class="main">${r.dayName} ${r.dateLabel}</div><div class="sub">No sessions</div></div><div class="amt" style="color:var(--text-dim);">—</div></div>`;
+    }
+    const cls = r.profit>=0?'pos':'neg';
+    return `<div class="list-row">
+      <div><div class="main">${r.dayName} ${r.dateLabel}</div><div class="sub">${round2(r.hours)}h · ${round2(r.km)} km · income ${money(round2(r.income))}</div></div>
+      <div class="amt cal-list-amt ${cls}">${r.profit>=0?'+':''}${money(round2(r.profit))}</div>
+    </div>`;
+  }).join('');
+}
+
+// ================= BACKUP, SNAPSHOT & SAFETY NET =================
+const DATA_KEYS = ['betafleet_sessions','betafleet_fuel','betafleet_expenses','betafleet_loan','betafleet_personal','betafleet_quickexpenses','betafleet_maintenance'];
+const SNAPSHOT_KEY = 'betafleet_snapshot';
+const LAST_EXPORT_KEY = 'betafleet_last_export_at';
+const EXPORT_REMINDER_DAYS = 14;
+
+// ---------- Cloud Backup (existing Firebase project, explicit on-demand only —
+// no automatic/background sync, same safe pattern as Export/Import) ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyAJEqQ4K9953VokBwW_ppym39T3zS1cm6E",
+  authDomain: "kanishka-enterprises.firebaseapp.com",
+  projectId: "kanishka-enterprises",
+  storageBucket: "kanishka-enterprises.firebasestorage.app",
+  messagingSenderId: "1096703773107",
+  appId: "1:1096703773107:web:cc3cd91cc42aa8e88aa3c6"
+};
+let cloudDb = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  cloudDb = firebase.firestore();
+}catch(e){ console.error('Firebase init failed', e); }
+const CLOUD_DOC = () => cloudDb.collection('kanishka').doc('cloud_backup_beta');
+
+async function backupToCloud(){
+  if(!cloudDb){ showAlert('Cloud backup isn\'t available right now (Firebase failed to load) — check your internet connection.'); return; }
+  if(!hasAnyData()){ showAlert('Nothing to back up yet.'); return; }
+  const statusEl = document.getElementById('cloud-backup-status');
+  if(statusEl) statusEl.textContent = 'Backing up…';
+  try{
+    const payload = buildBackupPayload();
+    payload.backedUpAt = Date.now();
+    await CLOUD_DOC().set(payload);
+    markExported();
+    renderCloudBackupStatus();
+    showAlert('Backed up to the cloud successfully.');
+  }catch(e){
+    console.error('cloud backup failed', e);
+    if(statusEl) statusEl.textContent = 'Last cloud backup: unknown';
+    showAlert('Cloud backup failed (' + (e && e.message ? e.message : 'unknown error') + '). Your data on this device is unaffected — try again, or use Save Backup File below instead.');
+  }
+}
+
+async function restoreFromCloud(){
+  if(!cloudDb){ showAlert('Cloud backup isn\'t available right now (Firebase failed to load) — check your internet connection.'); return; }
+  let snap;
+  try{
+    snap = await CLOUD_DOC().get();
+  }catch(e){
+    console.error('cloud restore fetch failed', e);
+    showAlert('Could not reach the cloud backup (' + (e && e.message ? e.message : 'unknown error') + '). Check your internet connection and try again.');
+    return;
+  }
+  if(!snap.exists){ showAlert('No cloud backup found yet — use "Backup Now" first.'); return; }
+  const payload = snap.data();
+  const when = payload.backedUpAt ? new Date(payload.backedUpAt).toLocaleString('en-IN') : 'an unknown time';
+  if(!await showConfirm(`Restore your data from the cloud backup made ${when}? This replaces whatever is currently on this device.`)) return;
+  if(hasAnyData()) takeSnapshot('right before this cloud restore'); // local safety net, same as Import
+  for(const key of DATA_KEYS){
+    if(payload.data && payload.data[key]!==undefined){ localStorage.setItem(key, JSON.stringify(payload.data[key])); }
+  }
+  showAlert('Restored from cloud. Reloading the app…');
+  setTimeout(()=>location.reload(), 1200);
+}
+
+async function renderCloudBackupStatus(){
+  const statusEl = document.getElementById('cloud-backup-status');
+  if(!statusEl) return;
+  if(!cloudDb){ statusEl.textContent = 'Cloud backup unavailable (offline or failed to load).'; return; }
+  try{
+    const snap = await CLOUD_DOC().get();
+    if(!snap.exists){ statusEl.textContent = 'No cloud backup yet.'; return; }
+    const payload = snap.data();
+    const when = payload.backedUpAt ? new Date(payload.backedUpAt).toLocaleString('en-IN') : 'unknown time';
+    statusEl.textContent = `Last cloud backup: ${when}`;
+  }catch(e){
+    statusEl.textContent = 'Could not check cloud backup status (check your connection).';
+  }
+}
+
+
+function hasAnyData(){
+  return DATA_KEYS.some(key=>{
+    const raw = localStorage.getItem(key);
+    if(raw==null) return false;
+    try{ const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed.length>0 : true; }
+    catch(e){ return false; }
+  });
+}
+
+function buildBackupPayload(){
+  const payload = {exportedAt: new Date().toISOString(), data:{}};
+  DATA_KEYS.forEach(key=>{
+    const raw = localStorage.getItem(key);
+    if(raw!=null) payload.data[key] = JSON.parse(raw);
+  });
+  return payload;
+}
+function buildBackupFile(){
+  const payload = buildBackupPayload();
+  const stamp = todayStr();
+  return new File([JSON.stringify(payload, null, 2)], `kanishka-fleet-backup-${stamp}.json`, {type:'application/json'});
+}
+function markExported(){
+  try{ localStorage.setItem(LAST_EXPORT_KEY, String(Date.now())); }catch(e){}
+  renderExportReminder();
+}
+function exportData(silent){
+  const file = buildBackupFile();
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  markExported();
+  if(!silent){
+    showAlert(`Saved as "${file.name}" in your phone's Downloads folder. Open the Files app → Downloads to find it and move it to Drive/Dropbox/email if you'd like.`);
+  }
+  return file.name;
+}
+async function shareBackup(){
+  const file = buildBackupFile();
+  try{
+    await navigator.share({
+      files: [file],
+      title: 'Kanishka Fleet backup',
+      text: 'Backup of your fleet app data — save this in Drive, Gmail, or wherever you keep it safe.'
+    });
+    markExported();
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // user cancelled the share sheet — nothing to do
+    console.error('share failed', e);
+    const filename = exportData(true); // silent=true, we show one combined message below instead
+    showAlert(`Direct sharing didn't work on this device (${e && e.message ? e.message : 'unknown reason'}) — saved "${filename}" to your Downloads folder instead. Open the Files app → Downloads to find it.`);
+  }
+}
+function initShareBackupButton(){
+  const btn = document.getElementById('share-backup-btn');
+  const previewEl = document.getElementById('export-filename-preview');
+  if(previewEl) previewEl.textContent = `"kanishka-fleet-backup-${todayStr()}.json"`;
+  if(!btn) return;
+  try{
+    const testFile = new File(['test'], 'test.json', {type:'application/json'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[testFile]})){
+      btn.style.display = 'block';
+    }
+  }catch(e){ /* Web Share with files not supported — button stays hidden, plain Export still works */ }
+}
+
+async function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  if(!await showConfirm('Import will overwrite your current data on this device with the file\'s contents. Continue?')){
+    event.target.value = '';
+    return;
+  }
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const data = payload.data || payload; // tolerate a raw {key:value} file too
+    if(hasAnyData()) takeSnapshot('right before this import'); // safety net in case the file is wrong
+    for(const key of DATA_KEYS){
+      if(data[key]!==undefined){
+        localStorage.setItem(key, JSON.stringify(data[key]));
+      }
+    }
+    showAlert('Import complete. Reloading the app…');
+    setTimeout(()=>location.reload(), 1200);
+  }catch(e){
+    console.error('Import failed', e);
+    showAlert('That file could not be read as a valid backup — make sure it\'s an unmodified export from this app.');
+  }
+  event.target.value = '';
+}
+
+// Same-day snapshot: a same-origin rollback point. This CANNOT survive clearing
+// browser data or uninstalling — only Export (a real downloaded file) protects
+// against that. This just guards against in-app mistakes (bad import, accidental
+// mass changes) during the current day.
+function takeSnapshot(reason){
+  const payload = {timestamp: Date.now(), reason: reason || 'daily', data:{}};
+  DATA_KEYS.forEach(key=>{
+    const raw = localStorage.getItem(key);
+    if(raw!=null) payload.data[key] = JSON.parse(raw);
+  });
+  try{ localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(payload)); }catch(e){}
+}
+function maybeTakeDailySnapshot(){
+  try{
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    const snap = raw ? JSON.parse(raw) : null;
+    const lastDay = snap ? new Date(snap.timestamp).toDateString() : null;
+    const today = new Date().toDateString();
+    if(lastDay !== today && hasAnyData()){
+      takeSnapshot('start of today');
+    }
+  }catch(e){ console.error('daily snapshot check failed', e); }
+}
+async function restoreSnapshot(){
+  const raw = localStorage.getItem(SNAPSHOT_KEY);
+  if(!raw) return;
+  const snap = JSON.parse(raw);
+  const when = new Date(snap.timestamp).toLocaleString('en-IN');
+  if(!await showConfirm(`Restore your data to how it was ${when} (${snap.reason})? This replaces whatever is currently saved.`)) return;
+  for(const key of DATA_KEYS){
+    if(snap.data[key]!==undefined){ localStorage.setItem(key, JSON.stringify(snap.data[key])); }
+    else{ localStorage.removeItem(key); }
+  }
+  showAlert('Restored. Reloading the app…');
+  setTimeout(()=>location.reload(), 1200);
+}
+async function resetApp(){
+  if(!hasAnyData()){ showAlert('There\'s no data on this device to reset.'); return; }
+  const lastExportRaw = localStorage.getItem(LAST_EXPORT_KEY);
+  const exportWarning = lastExportRaw
+    ? `Your last backup was ${new Date(Number(lastExportRaw)).toLocaleString('en-IN')}.`
+    : `You have never exported a backup.`;
+  if(!await showConfirm(`This permanently deletes ALL data on this device — sessions, fuel log, expenses, loan, personal trips. ${exportWarning} Continue?`)) return;
+  if(!await showConfirm(`Really sure? This is your last chance to back out — there's no undo after this.`)) return;
+  [...DATA_KEYS, SNAPSHOT_KEY, LAST_EXPORT_KEY].forEach(key=>{
+    try{ localStorage.removeItem(key); }catch(e){}
+  });
+  showAlert('All data deleted. Reloading the app…');
+  setTimeout(()=>location.reload(), 1200);
+}
+function renderSnapshotInfo(){
+  const raw = localStorage.getItem(SNAPSHOT_KEY);
+  const infoEl = document.getElementById('snapshot-info');
+  const btnEl = document.getElementById('snapshot-restore-btn');
+  if(!infoEl || !btnEl) return;
+  if(!raw){ infoEl.textContent = 'No snapshot yet.'; btnEl.style.display='none'; return; }
+  const snap = JSON.parse(raw);
+  const when = new Date(snap.timestamp).toLocaleString('en-IN');
+  infoEl.textContent = `Last snapshot: ${when} (${snap.reason})`;
+  btnEl.style.display = 'block';
+}
+
+function renderExportReminder(){
+  const bannerEl = document.getElementById('export-reminder-banner');
+  if(!bannerEl) return;
+  if(!hasAnyData()){ bannerEl.innerHTML=''; return; }
+  const lastExportRaw = localStorage.getItem(LAST_EXPORT_KEY);
+  if(!lastExportRaw){
+    bannerEl.innerHTML = `<div class="export-banner"><div class="title">💾 You haven't backed up yet</div>Tap Export below to save a copy off this device — it's your only real protection if this phone is lost, reset, or the browser data gets cleared.</div>`;
+    return;
+  }
+  const daysSince = Math.floor((Date.now() - Number(lastExportRaw)) / (1000*60*60*24));
+  if(daysSince >= EXPORT_REMINDER_DAYS){
+    bannerEl.innerHTML = `<div class="export-banner"><div class="title">💾 ${daysSince} days since your last backup</div>Worth exporting again, especially if you've logged much since then.</div>`;
+  } else {
+    bannerEl.innerHTML = '';
+  }
+}
+
+async function init(){
+  sessions = await loadArr('betafleet_sessions');
+  fuelEntries = await loadArr('betafleet_fuel');
+  fixedExpenses = await loadArr('betafleet_expenses');
+  loan = await loadObj('betafleet_loan');
+  if(loan && !loan.prepayments) loan.prepayments = [];
+  personalTrips = await loadArr('betafleet_personal');
+  quickExpenses = await loadArr('betafleet_quickexpenses');
+  maintenanceRecords = await loadArr('betafleet_maintenance');
+
+  initFuelForm();
+  initPersonalTripForm();
+  initMaintenanceForm();
+  initShareBackupButton();
+  const ptDetails = document.getElementById('personal-trip-details');
+  if(ptDetails){
+    ptDetails.addEventListener('toggle', ()=>{
+      const summary = ptDetails.querySelector('summary');
+      summary.textContent = (ptDetails.open ? '▾' : '▸') + ' Personal Use';
+    });
+  }
+  renderWork();
+  renderQuickExpenseHistory();
+  renderMaintenanceHistory();
+  renderFuelHistory();
+  renderFixedExpenses();
+  renderLoan();
+  maybeTakeDailySnapshot();
+  renderDashboard();
+  renderCloudBackupStatus();
+
+  setInterval(()=>{ if(document.getElementById('tab-work').classList.contains('active')) updateElapsedDisplay(); }, 15000);
+}
+init();
+</script>
+</body>
+</html>
